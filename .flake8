@@ -1,0 +1,51 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203
+exclude =
+    .git,
+    __pycache__,
+    build,
+    dist,
+    *.pyc,
+    *.pyo,
+    *.pyd,
+    .Python,
+    env,
+    pip-log.txt,
+    pip-delete-this-directory.txt,
+    .tox,
+    .coverage,
+    .coverage.*,
+    .cache,
+    nosetests.xml,
+    coverage.xml,
+    *.cover,
+    *.log,
+    .pytest_cache,
+    .env,
+    .venv,
+    venv,
+    ENV,
+    env.bak,
+    venv.bak,
+    .idea,
+    .vscode,
+    *.swp,
+    *.swo,
+    *~
+
+per-file-ignores =
+    # Ignore unused imports in __init__.py files
+    __init__.py: F401
+    # Ignore line length in tests
+    tests/*: E501
+    # Ignore unused variables in tests
+    tests/*: F841
+
+[flake8:local-plugins]
+extension =
+    F = flake8_future_import:FutureImportChecker
+    I = flake8_import_order:ImportOrderChecker
+    N = flake8_pep8_naming:NamingChecker
+    Q = flake8_quotes:QuotesChecker
+    W = flake8_walrus:WalrusChecker 

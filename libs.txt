@@ -1,0 +1,3 @@
+pip install Flask Flask-Cors Flask-JWT-Extended SQLAlchemy asyncpg # Still needed by SQLAlchemy even if not primary driver? Better safe.
+pip install aiosqlite # Specific driver for SQLite async
+pip install pydantic colorama cryptography psutil Werkzeug Flask-Limiter Flask-SSE redis graphene graphene-sqlalchemy Flask-GraphQL uvicorn passlib # Added passlib for password hashing suggestion
