@@ -1,101 +1,83 @@
-name: 🐳 Docker Build & Streamlit Check
+name: Build and Verify Docker Streamlit Supervisor App
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-env:
-  IMAGE_NAME: chaos4455/replika-broker-image
-  VERSION: RC1-beta-v0001
-  GITHUB_TOKEN: ${{ secrets.MASTERTOKEN }}
-  DOCKERHUB_USERNAME: chaos4455
+    branches:
+      - main
 
 jobs:
-  build-push-deploy:
+  build-and-check:
     runs-on: ubuntu-latest
 
+    env:
+      DOCKER_IMAGE_NAME: chaos4455/vectorial-profiler:latest
+
     steps:
-      - name: 🧾 Checkout repository
-        uses: actions/checkout@v4
+      - name: 📦 Checkout do Código
+        uses: actions/checkout@v3
 
-      - name: 🔐 Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: 🧾 Create Dockerfile dynamically
+      - name: 📁 Criação do Dockerfile Dinâmico
         run: |
-          cat <<'EOF' > Dockerfile
+          mkdir -p /home/replika/app
+          cp -r * /home/replika/app
+
+          cat <<EOF > Dockerfile
           FROM ubuntu:22.04
-          ENV DEBIAN_FRONTEND=noninteractive
 
           RUN apt-get update && \
               apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor && \
+              pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
 
-          RUN useradd -m -s /bin/bash replika && \
-              echo 'replika:replika' | chpasswd && \
-              mkdir -p /home/replika/app /var/log/supervisor
+          COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
           WORKDIR /home/replika/app
-
-          ARG GITHUB_TOKEN
-          RUN git clone https://${GITHUB_TOKEN}@github.com/chaos4455/projeto-message-broker-replika-ai-v1.git /home/replika/app
-
-          RUN pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
-
-          COPY supervisord.conf /etc/supervisor/supervisord.conf
-
-          CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
+          CMD ["/usr/bin/supervisord"]
           EOF
 
-      - name: 🧪 Create supervisord.conf
+      - name: 🔒 Login no Docker Hub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u chaos4455 --password-stdin
+
+      - name: 🐳 Build da Imagem Docker
+        run: docker build -t $DOCKER_IMAGE_NAME .
+
+      - name: 🚀 Subir Container
         run: |
-          cat <<'EOF' > supervisord.conf
-          [supervisord]
-          nodaemon=true
-          logfile=/var/log/supervisor/supervisord.log
+          docker run -d --name vectorial-profiler -p 8555:8555 -p 8881:8881 $DOCKER_IMAGE_NAME
+          sleep 15
 
-          [program:streamlit-dashboard]
-          command=python3 /home/replika/app/streamlit-control-center-v1.py
-          autostart=true
-          autorestart=true
-          stdout_logfile=/var/log/supervisor/streamlit.log
-          stderr_logfile=/var/log/supervisor/streamlit.err.log
-          EOF
-
-      - name: 🛠️ Build Docker Image
+      - name: 🧠 Verificar Serviços do Supervisor
         run: |
-          docker build --build-arg GITHUB_TOKEN=${{ env.GITHUB_TOKEN }} -t $IMAGE_NAME:$VERSION .
+          echo "🔍 Checando status geral dos serviços:"
+          docker exec vectorial-profiler supervisorctl status || echo "❌ Supervisor falhou ao listar status."
 
-      - name: 🧪 Run Container Temporarily
+      - name: 🔎 Verificar se Streamlit está de pé (porta 8555)
         run: |
-          docker run -d --rm -p 8555:8555 --name replika-test $IMAGE_NAME:$VERSION
+          for i in {1..6}; do
+            sleep 10
+            echo "Tentando conexão com Streamlit (tentativa $i)..."
+            if curl -s http://localhost:8555 | grep -iq "streamlit"; then
+              echo "✅ Streamlit subiu corretamente na porta 8555"
+              break
+            elif [ "$i" -eq 6 ]; then
+              echo "❌ Erro: Streamlit não subiu corretamente na porta 8555 após múltiplas tentativas"
+              echo "Coletando logs do container..."
+              docker logs vectorial-profiler
+              docker exec vectorial-profiler supervisorctl status
+              exit 1
+            fi
+          done
 
-      - name: 💤 Wait 15s for container to start
-        run: sleep 15
-
-      - name: 🔍 Check if Streamlit is running on port 8555
+      - name: 📄 Listar Processos Ativos no Container
         run: |
-          if curl -s http://localhost:8555 | grep -iq "streamlit"; then
-            echo "✅ Streamlit está ativo na porta 8555"
-          else
-            echo "❌ Erro: Streamlit não subiu corretamente na porta 8555"
-            docker logs replika-test || true
-            exit 1
-          fi
+          echo "📦 Processos ativos dentro do container:"
+          docker exec vectorial-profiler ps aux
 
-      - name: 🧹 Stop test container
+      - name: 🪵 Coletar Logs do Supervisor
+        run: |
+          echo "📑 Logs do Supervisor dentro do container:"
+          docker exec vectorial-profiler cat /var/log/supervisor/supervisord.log || echo "❌ Falha ao coletar logs do Supervisor"
+
+      - name: 🧼 Cleanup (opcional)
         if: always()
-        run: docker stop replika-test
-
-      - name: 📤 Push Docker image to Docker Hub
-        run: |
-          docker push $IMAGE_NAME:$VERSION
-
-      # - name: 🏷️ (Opcional) Criar tag da imagem
-      #   run: |
-      #     git tag $VERSION
-      #     git push origin $VERSION
+        run: docker rm -f vectorial-profiler || true
