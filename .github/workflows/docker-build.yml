@@ -13,18 +13,14 @@ jobs:
     - name: 📥 Checkout do código
       uses: actions/checkout@v4
 
-    - name: 🔐 Login no Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: 🔐 Login no Docker Hub (via shell)
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u chaos4455 --password-stdin
 
     - name: 📝 Criar Dockerfile dinamicamente
       run: |
         cat <<'EOF' > Dockerfile
         FROM ubuntu:22.04
 
-        # --- Atualiza e instala dependências essenciais ---
         RUN apt-get update && apt-get install -y \
             python3 python3-pip \
             gcc libpq-dev build-essential \
@@ -33,20 +29,16 @@ jobs:
             libpam0g-dev libpam-modules && \
             apt-get clean
 
-        # --- Cria usuário admin com permissão sudo ---
         RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
             echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-        # --- Ativa o SSH ---
         RUN mkdir /var/run/sshd
 
-        # --- Hardening SSH ---
         RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-        # --- Ativa UFW e libera portas ---
         RUN ufw allow 22 && \
             ufw allow 8000 && \
             ufw allow 8080 && \
@@ -55,27 +47,18 @@ jobs:
             ufw allow OpenSSH && \
             ufw --force enable
 
-        # --- Define diretório de trabalho ---
         WORKDIR /app
-
-        # --- Copia os arquivos do projeto ---
         COPY requirements.txt .
         COPY message-broker-v3-clean.py .
-
-        # --- Instala dependências Python ---
         RUN pip3 install --no-cache-dir -r requirements.txt
 
-        # --- Expõe as portas ---
         EXPOSE 22 8000 8080 8333 8777
 
-        # --- Inicia SSH + App ---
         CMD service ssh start && python3 message-broker-v3-clean.py
         EOF
 
     - name: 🏗️ Build da imagem Docker
-      run: |
-        docker build -t chaos4455/message-broker-v3:latest .
+      run: docker build -t chaos4455/message-broker-v3:latest .
 
     - name: 🚀 Push para o Docker Hub
-      run: |
-        docker push chaos4455/message-broker-v3:latest
+      run: docker push chaos4455/message-broker-v3:latest
