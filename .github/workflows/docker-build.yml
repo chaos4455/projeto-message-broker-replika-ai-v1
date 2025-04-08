@@ -1,4 +1,4 @@
-name: 🚀 Build and Push Docker Image
+name: 🚀 Build and Deploy Docker Image with Health Check
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  build-deploy-test:
     runs-on: ubuntu-latest
 
     env:
@@ -32,34 +32,19 @@ jobs:
               mkdir -p /home/replika/app
 
           WORKDIR /home/replika/app
-
           COPY . .
 
-          # ✅ Instala dependências do Python necessárias
-          RUN pip3 install --no-cache-dir \
-            requests \
-            fastapi \
-            uvicorn[standard] \
-            tortoise-orm \
-            aiosqlite \
-            pydantic[email] \
-            python-jose[cryptography] \
-            colorama \
-            cryptography \
-            psutil \
-            Werkzeug \
-            slowapi \
-            strawberry-graphql[fastapi] \
-            Jinja2 \
-            ipaddress \
-            passlib
+          RUN pip install --no-cache-dir requests schedule \
+              fastapi uvicorn[standard] tortoise-orm aiosqlite \
+              pydantic[email] python-jose[cryptography] \
+              colorama cryptography psutil Werkzeug slowapi \
+              strawberry-graphql[fastapi] Jinja2 ipaddress passlib
 
-          # ✅ Comando final: inicia todos os scripts
           CMD bash -c "\
             python3 message-broker-v3-clean.py & \
-            sleep 5 && \
+            sleep 10 && \
             python3 webdash3-clean.py & \
-            sleep 5 && \
+            sleep 20 && \
             python3 geramensagem-v3-massive-loop.py & \
             sleep 5 && \
             python3 coleta-mensagem-v3-batch-lote.py && \
@@ -79,3 +64,15 @@ jobs:
       - name: 📤 Push Docker Image
         run: |
           docker push $IMAGE_NAME:$VERSION
+
+      - name: 🚀 Run Container for Test
+        run: |
+          docker run -d --name replika-test \
+            -p 8333:8333 -p 8777:8777 -p 8000:8000 -p 8080:8080 \
+            $IMAGE_NAME:$VERSION
+
+      - name: 🔍 Check Ports and Logs
+        run: |
+          sleep 20
+          docker ps
+          docker logs replika-test
