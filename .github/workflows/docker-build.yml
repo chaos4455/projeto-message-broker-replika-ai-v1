@@ -1,8 +1,8 @@
-name: 🚀 Build & Release - Replika AI Message Broker
+name: 🚀 Build, Push e Teste do Docker - Replika AI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 env:
   IMAGE_NAME: chaos4455/message-broker-replika
@@ -11,55 +11,55 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.tag_version.outputs.new_tag }}
 
     steps:
-    - name: 🧾 Checkout do Repositório
-      uses: actions/checkout@v4
+    - name: 📥 Clona o repositório
+      uses: actions/checkout@v3
 
-    - name: 🔢 Gerar versão de release automaticamente
-      id: tag_version
+    - name: 🧠 Gera número da versão
+      id: versioning
       run: |
-        last_tag=$(git tag --sort=-v:refname | grep "${VERSION_PREFIX}" | head -n 1)
-        if [ -z "$last_tag" ]; then
-          next_tag="${VERSION_PREFIX}0001"
+        TAGS=$(git ls-remote --tags origin | grep "${VERSION_PREFIX}" | awk -F'/' '{print $3}' | sort -V)
+        LAST_TAG=$(echo "$TAGS" | tail -n 1)
+        if [[ "$LAST_TAG" =~ ${VERSION_PREFIX}([0-9]+) ]]; then
+          NUMBER=$(printf "%04d" $((10#${BASH_REMATCH[1]} + 1)))
         else
-          base_num=$(echo $last_tag | grep -o '[0-9]*$')
-          next_num=$(printf "%04d" $((10#$base_num + 1)))
-          next_tag="${VERSION_PREFIX}${next_num}"
+          NUMBER="0001"
         fi
-        echo "👉 Nova tag: $next_tag"
-        echo "new_tag=$next_tag" >> "$GITHUB_OUTPUT"
+        NEW_TAG="${VERSION_PREFIX}${NUMBER}"
+        echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-    - name: 🐳 Login no DockerHub
+    - name: 🔐 Login no DockerHub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: 📦 Build da imagem Docker com Dockerfile gerado dinamicamente
+    - name: 📝 Gera Dockerfile dinamicamente
       run: |
-        cat << 'EOF' > Dockerfile
+        cat <<EOF > Dockerfile
         FROM ubuntu:22.04
 
+        # Otimizações de imagem
         ENV DEBIAN_FRONTEND=noninteractive
 
-        RUN apt-get update && apt-get upgrade -y && \
-            apt-get install -y python3 python3-pip gcc libpq-dev build-essential \
-            openssh-server sudo ufw nano vim htop iftop net-tools curl wget unzip iputils-ping \
-            libpam0g-dev libpam-modules && apt-get clean && rm -rf /var/lib/apt/lists/*
+        RUN apt-get update && apt-get upgrade -y && apt-get install -y \\
+            python3 python3-pip gcc libpq-dev build-essential \\
+            openssh-server sudo ufw nano vim htop iftop net-tools curl wget unzip iputils-ping \\
+            libpam0g-dev libpam-modules && \\
+            apt-get clean && rm -rf /var/lib/apt/lists/*
 
-        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
-            echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && mkdir /var/run/sshd
+        # Usuário admin
+        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-        RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-            sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-            sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-            sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+        # SSH
+        RUN mkdir /var/run/sshd
+        RUN sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \\
+            sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/^#\\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/^#\\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
         WORKDIR /app
-
         COPY requirements.txt .
         COPY message-broker-v3-clean.py .
         COPY webdash3-clean.py .
@@ -70,53 +70,47 @@ jobs:
 
         EXPOSE 22 8000 8080 8333 8777
 
-        CMD service ssh start && \
-            python3 message-broker-v3-clean.py & \
-            sleep 5 && \
-            python3 webdash3-clean.py & \
-            sleep 5 && \
-            python3 geramensagem-v3-massive-loop.py & \
-            sleep 5 && \
-            python3 coleta-mensagem-v3-batch-lote.py && \
+        CMD service ssh start && \\
+            python3 message-broker-v3-clean.py & \\
+            sleep 5 && python3 webdash3-clean.py & \\
+            sleep 5 && python3 geramensagem-v3-massive-loop.py & \\
+            sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \\
             tail -f /dev/null
         EOF
 
-        docker build -t $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }} .
+    - name: 🛠️ Build da imagem Docker
+      run: docker build -t $IMAGE_NAME:${{ steps.versioning.outputs.tag }} .
 
-    - name: 📤 Push da imagem para DockerHub
-      run: |
-        docker tag $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }} $IMAGE_NAME:latest
-        docker push $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }}
-        docker push $IMAGE_NAME:latest
+    - name: ☁️ Push para o DockerHub
+      run: docker push $IMAGE_NAME:${{ steps.versioning.outputs.tag }}
 
-    - name: 🏷️ Criar e pushar tag de release
+    - name: 🏷️ Cria e envia nova tag Git
       env:
         GH_TOKEN: ${{ secrets.MASTERTOKEN }}
       run: |
         git config user.name "Elias Andrade - Replika AI"
         git config user.email "chaos4455@users.noreply.github.com"
-        git tag ${{ steps.tag_version.outputs.new_tag }}
-        git remote set-url origin https://chaos4455:${GH_TOKEN}@github.com/${{ github.repository }}
-        git push origin ${{ steps.tag_version.outputs.new_tag }}
+        git tag ${{ steps.versioning.outputs.tag }}
+        git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} --tags
 
-  test-pipeline:
+  test-run:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
-    - name: 🐳 Instalar Docker
+    - name: 🐳 Instala o Docker
       run: |
-        sudo apt-get update && sudo apt-get install -y docker.io
-        sudo systemctl start docker
+        sudo apt-get update
+        sudo apt-get install -y docker.io
 
-    - name: 🧪 Testar a imagem e verificar porta 8777
+    - name: 🔍 Testa imagem e expõe porta 8777
       run: |
-        docker pull $IMAGE_NAME:${{ needs.build-and-push.outputs.new_tag }}
-        docker run -d --name test-container -p 8777:8777 $IMAGE_NAME:${{ needs.build-and-push.outputs.new_tag }}
+        docker pull ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.tag }}
+        docker run -d -p 8777:8777 --name test_container ${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.tag }}
         sleep 10
-        if ss -tuln | grep :8777; then
-          echo "✅ Porta 8777 está ativa!"
+        if curl -s http://localhost:8777; then
+          echo "✅ Porta 8777 respondendo"
         else
-          echo "❌ Porta 8777 não está respondendo!"
+          echo "❌ Falha ao acessar porta 8777"
           exit 1
         fi
