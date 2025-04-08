@@ -1,5 +1,4 @@
-name: 🚀 Build and Push Docker Image
-
+name: 🚀 Build, Push and Deploy Docker Image
 
 on:
   push:
@@ -7,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -21,14 +20,14 @@ jobs:
 
       - name: 🧾 Create Dockerfile dynamically
         run: |
-          cat <<'EOF' > Dockerfile
+          cat <<EOF > Dockerfile
           FROM ubuntu:22.04
           ENV DEBIAN_FRONTEND=noninteractive
 
           RUN apt-get update && \
               apt-get upgrade -y && \
               apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server && \
-              pip3 install --no-cache-dir requests && \
+              pip3 install requests && \
               useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
               mkdir -p /home/replika/app
@@ -60,3 +59,26 @@ jobs:
       - name: 📤 Push Docker Image
         run: |
           docker push $IMAGE_NAME:$VERSION
+
+      - name: 🚀 Run Docker Container to Validate Ports
+        run: |
+          docker run -d \
+            --name message-broker-test \
+            -p 8333:8333 \
+            -p 8777:8777 \
+            $IMAGE_NAME:$VERSION
+
+          echo "⌛ Aguardando subida dos serviços..."
+          sleep 15
+
+          echo "🔍 Verificando container em execução:"
+          docker ps
+
+          echo "🧪 Verificando portas abertas:"
+          ss -tuln | grep ':8333\|:8777' || echo "❌ Portas não detectadas!"
+
+      - name: 🧹 Stop and Remove Test Container
+        if: always()
+        run: |
+          docker stop message-broker-test || true
+          docker rm message-broker-test || true
