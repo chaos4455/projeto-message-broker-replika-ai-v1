@@ -1,120 +1,89 @@
-name: ✨ CI/CD Replika AI Message Broker
+name: 🐳 Build Docker Image - Replika AI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: chaos4455/message-broker-replika
-  VERSION_PREFIX: RC1-beta-v
+  GITHUB_REPO: chaos4455/projeto-message-broker-replika-ai-v1
+  VERSION_TAG: latest
 
 jobs:
-  build-and-push:
-    name: 📅 Build e Push da Imagem
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📂 Checkout do Repositório
+      - name: 🧾 Checkout do repositório
         uses: actions/checkout@v4
 
-      - name: 🔑 Configura Git com token de acesso
-        run: |
-          git config --global user.name "Elias Andrade - Replika AI"
-          git config --global user.email "chaos4455@users.noreply.github.com"
+      - name: 🛠️ Setup Docker
+        uses: docker/setup-buildx-action@v3
 
-      - name: 🔄 Define nova versão dinamicamente
-        id: version
+      - name: 📥 Baixar código do repositório privado
         run: |
-          PREFIX="${{ env.VERSION_PREFIX }}"
-          git fetch --tags || true
-          LAST_TAG=$(git tag --sort=-v:refname | grep "^$PREFIX" | head -n 1 || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            NEXT="0001"
-          else
-            NUMBER=$(echo "$LAST_TAG" | grep -oP '\\d+$')
-            NEXT=$(printf "%04d" $((10#$NUMBER + 1)))
-          fi
-          echo "version=${PREFIX}${NEXT}" >> $GITHUB_OUTPUT
-          echo "🔹 Versão gerada: ${PREFIX}${NEXT}"
+          git clone https://${{ secrets.MASTERTOKEN }}@github.com/${{ env.GITHUB_REPO }} app
 
-      - name: 🚧 Gera Dockerfile dinamicamente
+      - name: 📁 Criar Dockerfile dinamicamente
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && apt-get upgrade -y && apt-get install -y \
-              python3 python3-pip \
-              gcc libpq-dev build-essential \
-              openssh-server sudo ufw \
-              nano vim htop iftop net-tools curl wget unzip iputils-ping \
-              libpam0g-dev libpam-modules --no-install-recommends && \
-              apt-get clean && rm -rf /var/lib/apt/lists/*
+          ARG GITHUB_PAT
+          ENV DEBIAN_FRONTEND=noninteractive
 
-          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
-              echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+          RUN apt-get update && \
+              apt-get upgrade -y && \
+              apt-get install -y python3 python3-pip ufw git net-tools curl iputils-ping nano openssh-server && \
+              useradd -m -s /bin/bash replika && \
+              echo 'replika:replika' | chpasswd && \
+              ufw allow 22 && \
+              ufw allow 8000 && \
+              ufw allow 8080 && \
+              ufw allow 8333 && \
+              ufw allow 8777 && \
+              ufw allow OpenSSH && \
+              ufw --force enable && \
+              mkdir -p /home/replika/app
 
-          RUN mkdir /var/run/sshd
+          COPY ./app /home/replika/app
 
-          RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+          WORKDIR /home/replika/app
 
-          WORKDIR /app
+          RUN pip3 install -r requirements.txt || true
 
-          COPY requirements.txt .
-          COPY *.py ./
-
-          RUN pip3 install --no-cache-dir -r requirements.txt
-
-          EXPOSE 22 8000 8080 8333 8777
-
-          CMD service ssh start && \
-              python3 message-broker-v3-clean.py & \
-              sleep 5 && python3 webdash3-clean.py & \
-              sleep 5 && python3 geramensagem-v3-massive-loop.py & \
-              sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \
-              tail -f /dev/null
+          CMD bash -c "
+            python3 message-broker-v3-clean.py & 
+            sleep 5 && 
+            python3 webdash3-clean.py & 
+            sleep 5 && 
+            python3 geramensagem-v3-massive-loop.py & 
+            sleep 5 && 
+            python3 coleta-mensagem-v3-batch-lote.py && 
+            tail -f /dev/null"
           EOF
 
-      - name: 🔋 Login no Docker Hub
+      - name: 🔧 Build da imagem Docker
+        run: |
+          docker build \
+            --build-arg GITHUB_PAT=${{ secrets.MASTERTOKEN }} \
+            -t $IMAGE_NAME:$VERSION_TAG .
+
+      - name: 🔐 Login no Docker Hub
         uses: docker/login-action@v2
         with:
-          username: chaos4455
+          username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 💪 Build da Imagem Docker
+      - name: 📤 Push da imagem para Docker Hub
         run: |
-          docker build -t $IMAGE_NAME:${{ steps.version.outputs.version }} .
+          docker push $IMAGE_NAME:$VERSION_TAG
 
-      - name: ⬆️ Push da imagem para DockerHub
-        run: |
-          docker push $IMAGE_NAME:${{ steps.version.outputs.version }}
-
-      - name: 🔖 Cria tag no Git
-        env:
-          GITHUB_TOKEN: ${{ secrets.MASTERTOKEN }}
-        run: |
-          git tag ${{ steps.version.outputs.version }}
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} --tags
-
-  test:
-    name: ✅ Testa imagem em container
-    needs: build-and-push
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 🚧 Instala Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-
-      - name: ⚡ Baixa e sobe o container
-        run: |
-          docker pull $IMAGE_NAME:${{ needs.build-and-push.outputs.version }}
-          docker run -d -p 8777:8777 --name teste_replika $IMAGE_NAME:${{ needs.build-and-push.outputs.version }}
-          sleep 10
-          docker ps
-          ss -ltnp | grep 8777
-
-# Assinado: Elias Andrade — Replika AI Solutions 🚀
+      # - name: 🏷️ (Opcional) Criar tag de versão - atualmente desativado
+      #   run: |
+      #     git config --global user.name "Elias Andrade - Replika AI"
+      #     git config --global user.email "chaos4455@users.noreply.github.com"
+      #     git tag RC1-beta-v0001
+      #     git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/${{ env.GITHUB_REPO }} --tags
