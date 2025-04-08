@@ -1,89 +1,75 @@
-name: 🐳 Build Docker Image - Replika AI
+name: 🔧 Build Docker Image Replika AI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
   IMAGE_NAME: chaos4455/message-broker-replika
-  GITHUB_REPO: chaos4455/projeto-message-broker-replika-ai-v1
-  VERSION_TAG: latest
+  VERSION: latest
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧾 Checkout do repositório
-        uses: actions/checkout@v4
+    - name: 📥 Checkout repositório
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🛠️ Setup Docker
-        uses: docker/setup-buildx-action@v3
+    - name: 🛠️ Configurar Dockerfile dinâmico
+      run: |
+        cat <<EOF > Dockerfile
+        FROM ubuntu:22.04
 
-      - name: 📥 Baixar código do repositório privado
-        run: |
-          git clone https://${{ secrets.MASTERTOKEN }}@github.com/${{ env.GITHUB_REPO }} app
+        ARG GITHUB_PAT
+        ENV DEBIAN_FRONTEND=noninteractive
 
-      - name: 📁 Criar Dockerfile dinamicamente
-        run: |
-          cat <<EOF > Dockerfile
-          FROM ubuntu:22.04
+        RUN apt-get update && \
+            apt-get upgrade -y && \
+            apt-get install -y python3 python3-pip ufw git net-tools curl iputils-ping nano openssh-server && \
+            useradd -m -s /bin/bash replika && \
+            echo 'replika:replika' | chpasswd && \
+            ufw allow 22 && \
+            ufw allow 8000 && \
+            ufw allow 8080 && \
+            ufw allow 8333 && \
+            ufw allow 8777 && \
+            ufw allow OpenSSH && \
+            ufw --force enable && \
+            mkdir -p /home/replika/app
 
-          ARG GITHUB_PAT
-          ENV DEBIAN_FRONTEND=noninteractive
+        WORKDIR /home/replika/app
 
-          RUN apt-get update && \
-              apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip ufw git net-tools curl iputils-ping nano openssh-server && \
-              useradd -m -s /bin/bash replika && \
-              echo 'replika:replika' | chpasswd && \
-              ufw allow 22 && \
-              ufw allow 8000 && \
-              ufw allow 8080 && \
-              ufw allow 8333 && \
-              ufw allow 8777 && \
-              ufw allow OpenSSH && \
-              ufw --force enable && \
-              mkdir -p /home/replika/app
+        RUN git clone https://x-access-token:\${GITHUB_PAT}@github.com/chaos4455/projeto-message-broker-replika-ai-v1.git temp && \
+            cp temp/*.py ./ && \
+            rm -rf temp
 
-          COPY ./app /home/replika/app
+        RUN pip3 install -r requirements.txt || true
 
-          WORKDIR /home/replika/app
+        CMD bash -c "python3 message-broker-v3-clean.py & sleep 5 && python3 webdash3-clean.py & sleep 5 && python3 geramensagem-v3-massive-loop.py & sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && tail -f /dev/null"
+        EOF
 
-          RUN pip3 install -r requirements.txt || true
+    - name: 🐳 Build Docker Image
+      run: |
+        docker build \
+          --build-arg GITHUB_PAT=${{ secrets.MASTERTOKEN }} \
+          -t $IMAGE_NAME:$VERSION .
 
-          CMD bash -c "
-            python3 message-broker-v3-clean.py & 
-            sleep 5 && 
-            python3 webdash3-clean.py & 
-            sleep 5 && 
-            python3 geramensagem-v3-massive-loop.py & 
-            sleep 5 && 
-            python3 coleta-mensagem-v3-batch-lote.py && 
-            tail -f /dev/null"
-          EOF
+    - name: 🐳 Push to Docker Hub (opcional)
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: 🔧 Build da imagem Docker
-        run: |
-          docker build \
-            --build-arg GITHUB_PAT=${{ secrets.MASTERTOKEN }} \
-            -t $IMAGE_NAME:$VERSION_TAG .
+    - name: 📤 Push imagem para Docker Hub (opcional)
+      run: docker push $IMAGE_NAME:$VERSION
 
-      - name: 🔐 Login no Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: 📤 Push da imagem para Docker Hub
-        run: |
-          docker push $IMAGE_NAME:$VERSION_TAG
-
-      # - name: 🏷️ (Opcional) Criar tag de versão - atualmente desativado
-      #   run: |
-      #     git config --global user.name "Elias Andrade - Replika AI"
-      #     git config --global user.email "chaos4455@users.noreply.github.com"
-      #     git tag RC1-beta-v0001
-      #     git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/${{ env.GITHUB_REPO }} --tags
+    # - name: 🏷️ Criar nova tag (desativado por enquanto)
+    #   run: |
+    #     git config --global user.name "Elias Andrade - Replika AI"
+    #     git config --global user.email "chaos4455@users.noreply.github.com"
+    #     git tag RC1-beta-v0001
+    #     git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/chaos4455/projeto-message-broker-replika-ai-v1 --tags
