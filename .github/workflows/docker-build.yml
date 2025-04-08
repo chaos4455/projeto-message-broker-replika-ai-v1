@@ -19,46 +19,42 @@ jobs:
         uses: actions/checkout@v3
 
       - name: 🔄 Garantindo Pull de Últimos Dados
-        run: |
-          git pull origin main || echo "⚠️ Pull falhou ou não era necessário."
+        run: git pull origin main || echo "⚠️ Aviso: Falha ao executar git pull, talvez não seja necessário."
 
-      - name: 📁 Preparando diretório de build com exclusão
-        shell: bash
+      - name: 📁 Preparando diretório temporário para build
         run: |
-          echo "📁 Limpando diretório dockerbuild..."
+          echo "📁 Limpando diretório de build..."
           rm -rf dockerbuild
           mkdir -p dockerbuild/app
-          shopt -s extglob
           cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
-          shopt -u extglob
 
-      - name: 📜 Validando existência de arquivos essenciais
+      - name: 📜 Validando existência de arquivos importantes
         run: |
           ls -lah dockerbuild/app
-          [ -f dockerbuild/app/requirements.txt ] || (echo "❌ requirements.txt ausente!" && exit 1)
+          if [ ! -f dockerbuild/app/requirements.txt ]; then
+            echo "❌ Arquivo requirements.txt ausente!"
+            exit 1
+          fi
 
       - name: 📝 Gerando Dockerfile Dinamicamente
         run: |
           cat <<EOF > dockerbuild/Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && \
-              apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat && \
-              mkdir -p /var/run/sshd
+          RUN apt-get update && apt-get upgrade -y && \
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat
 
-          # Criação de usuário admin com SSH
+          COPY app /home/replika/app
+          WORKDIR /home/replika/app
+          RUN pip3 install --no-cache-dir -r requirements.txt
+
           RUN useradd -m -s /bin/bash admin && \
               echo "admin:admin" | chpasswd && \
               echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-              echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+              echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
+              mkdir -p /var/run/sshd
 
-          # Copiando app
-          COPY app /home/replika/app
           COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-          WORKDIR /home/replika/app
-          RUN pip3 install --no-cache-dir -r requirements.txt
 
           CMD ["/usr/bin/supervisord"]
           EOF
@@ -73,39 +69,53 @@ jobs:
           command=/usr/sbin/sshd -D
           autostart=true
           autorestart=true
+          stdout_logfile=/var/log/supervisor/sshd.log
+          stderr_logfile=/var/log/supervisor/sshd.err.log
 
-          [program:message-broker]
+          [program:broker]
           command=python3 /home/replika/app/message-broker-v3-clean.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/message-broker.log
-          stderr_logfile=/var/log/supervisor/message-broker.err
+          stdout_logfile=/var/log/supervisor/broker.log
+          stderr_logfile=/var/log/supervisor/broker.err.log
 
           [program:webdash]
           command=python3 /home/replika/app/webdash3-clean.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
+          stdout_logfile=/var/log/supervisor/webdash.log
+          stderr_logfile=/var/log/supervisor/webdash.err.log
 
           [program:geramensagem]
           command=python3 /home/replika/app/geramensagem-v3-massive-loop.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
+          stdout_logfile=/var/log/supervisor/geramensagem.log
+          stderr_logfile=/var/log/supervisor/geramensagem.err.log
 
-          [program:coleta]
+          [program:coletamensagem]
           command=python3 /home/replika/app/coleta-mensagem-v3-batch-lote.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
+          stdout_logfile=/var/log/supervisor/coletamensagem.log
+          stderr_logfile=/var/log/supervisor/coletamensagem.err.log
           EOF
 
       - name: 🔐 Login no Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u chaos4455 --password-stdin
 
       - name: 🛠️ Build da Imagem Docker
-        run: docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
+        run: |
+          docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
+
+      - name: ⏫ Push para Docker Hub
+        run: |
+          echo "🚀 Enviando imagem para o Docker Hub..."
+          docker push $DOCKER_IMAGE_NAME
 
       - name: 🚀 Subindo Container
         run: |
@@ -119,32 +129,40 @@ jobs:
             $DOCKER_IMAGE_NAME
           sleep 30
 
-      - name: 🧠 Verificar Supervisor
-        run: docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "⚠️ Falha ao verificar status."
+      - name: 🧠 Verificar serviços via Supervisor
+        run: |
+          echo "🔍 Status do Supervisor:"
+          docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "❌ Falha ao coletar status do supervisor."
 
-      - name: 📡 Testar portas abertas
+      - name: 📡 Testar portas adicionais
         run: |
           declare -A portas=(
-            ["Dashboard Web (8881)"]=8881
-            ["Message Broker API (8777)"]=8777
-            ["Dash Monitor (8333)"]=8333
+            ["WebDash (8881)"]=8881
+            ["Broker API (8777)"]=8777
+            ["Mensagens (8333)"]=8333
+            ["Streamlit Control (8555)"]=8555
           )
           for nome in "${!portas[@]}"; do
             porta=${portas[$nome]}
-            echo "🔎 Verificando $nome na porta $porta..."
-            nc -zv 127.0.0.1 $porta && echo "✅ Porta $porta OK" || echo "❌ Porta $porta falhou"
+            echo "🔎 Testando $nome - Porta $porta..."
+            nc -zv 127.0.0.1 $porta && echo "✅ $nome OK!" || echo "❌ Falha ao acessar $nome"
           done
 
-      - name: 🔐 Testar SSH na porta 8222
+      - name: 🔐 Testar SSH (porta 8222)
         run: |
+          echo "⏳ Aguardando o SSH ficar pronto..."
           sleep 10
-          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ SSH OK!"' || echo "❌ SSH falhou"
+          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ Login SSH bem-sucedido!"' || echo "❌ Falha no login SSH!"
 
-      - name: 🧾 Logs do Supervisor
-        run: docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs"
+      - name: 🪵 Coletar Logs do Supervisor
+        run: |
+          echo "📑 Logs do Supervisor:"
+          docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs."
 
-      - name: 📦 Processos Ativos no Container
-        run: docker exec $DOCKER_CONTAINER_NAME ps aux
+      - name: 📦 Listar Processos Ativos
+        run: |
+          echo "📋 Processos ativos:"
+          docker exec $DOCKER_CONTAINER_NAME ps aux
 
       - name: 🧼 Cleanup (opcional)
         if: always()
