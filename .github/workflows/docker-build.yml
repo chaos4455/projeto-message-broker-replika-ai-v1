@@ -1,50 +1,80 @@
-FROM ubuntu:22.04
+name: 🚀 Build & Push Docker Image
 
-# --- Atualiza e instala dependências essenciais ---
-RUN apt-get update && apt-get install -y \
-    python3 python3-pip \
-    gcc libpq-dev build-essential \
-    openssh-server sudo ufw \
-    nano vim htop iftop net-tools curl wget unzip iputils-ping \
-    libpam0g-dev libpam-modules && \
-    apt-get clean
+on:
+  push:
+    branches:
+      - main
 
-# --- Configura usuário admin com senha admin ---
-RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
 
-# --- Ativa SSH e configura diretório necessário ---
-RUN mkdir /var/run/sshd
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
 
-# --- Segurança básica (hardening) ---
-# - Bloqueia root remoto
-# - Força uso de senha forte e shell seguro
-# - Impede login de senhas vazias
-RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-    sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+    - name: 🔐 Login no Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-# --- UFW: libera as portas desejadas ---
-RUN ufw allow 22 && \
-    ufw allow 8000 && \
-    ufw allow 8080 && \
-    ufw allow 8333 && \
-    ufw allow 8777 && \
-    ufw allow OpenSSH && \
-    ufw --force enable
+    - name: 📝 Gerar Dockerfile dinamicamente
+      run: |
+        cat <<'EOF' > Dockerfile
+        FROM ubuntu:22.04
 
-# --- Define diretório do app ---
-WORKDIR /app
+        # --- Atualiza e instala dependências essenciais ---
+        RUN apt-get update && apt-get install -y \
+            python3 python3-pip \
+            gcc libpq-dev build-essential \
+            openssh-server sudo ufw \
+            nano vim htop iftop net-tools curl wget unzip iputils-ping \
+            libpam0g-dev libpam-modules && \
+            apt-get clean
 
-# --- Copia arquivos do repositório ---
-COPY requirements.txt .
-COPY message-broker-v3-clean.py .
+        # --- Configura usuário admin com senha admin ---
+        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-# --- Instala pacotes Python necessários ---
-RUN pip3 install --no-cache-dir -r requirements.txt
+        # --- Ativa SSH e configura diretório necessário ---
+        RUN mkdir /var/run/sshd
 
-# --- Expõe as portas do serviço e SSH ---
-EXPOSE 22 8000 8080 8333 8777
+        # --- Segurança básica (hardening) ---
+        RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-# --- Comando principal ---
-CMD service ssh start && python3 message-broker-v3-clean.py
+        # --- UFW: libera as portas desejadas ---
+        RUN ufw allow 22 && \
+            ufw allow 8000 && \
+            ufw allow 8080 && \
+            ufw allow 8333 && \
+            ufw allow 8777 && \
+            ufw allow OpenSSH && \
+            ufw --force enable
+
+        # --- Define diretório do app ---
+        WORKDIR /app
+
+        # --- Copia arquivos do repositório ---
+        COPY requirements.txt .
+        COPY message-broker-v3-clean.py .
+
+        # --- Instala pacotes Python necessários ---
+        RUN pip3 install --no-cache-dir -r requirements.txt
+
+        # --- Expõe as portas do serviço e SSH ---
+        EXPOSE 22 8000 8080 8333 8777
+
+        # --- Comando principal ---
+        CMD service ssh start && python3 message-broker-v3-clean.py
+        EOF
+
+    - name: 🐳 Build da imagem Docker
+      run: |
+        docker build -t chaos4455/message-broker-v3:latest .
+
+    - name: 🚀 Push da imagem pro Docker Hub
+      run: |
+        docker push chaos4455/message-broker-v3:latest
