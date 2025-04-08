@@ -1,93 +1,122 @@
-name: 🐳 Build, Tag & Push Docker - Replika AI
+name: 🚀 Build & Release - Replika AI Message Broker
 
 on:
   push:
     branches: [ main ]
 
+env:
+  IMAGE_NAME: chaos4455/message-broker-replika
+  VERSION_PREFIX: RC1-beta-v
+
 jobs:
-  build-tag-push:
+  build-and-push:
     runs-on: ubuntu-latest
-    name: 🔖 Build com Auto Versionamento
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
 
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # necessário para buscar todas as tags
+    - name: 🧾 Checkout do Repositório
+      uses: actions/checkout@v4
 
-      - name: 🏷️ Gerar nova versão baseada em tag RC1-beta-vXXXX
-        id: version
-        run: |
-          latest_tag=$(git tag -l 'RC1-beta-v*' | sort -V | tail -n 1)
-          echo "Última tag encontrada: $latest_tag"
+    - name: 🔢 Gerar versão de release automaticamente
+      id: tag_version
+      run: |
+        last_tag=$(git tag --sort=-v:refname | grep "${VERSION_PREFIX}" | head -n 1)
+        if [ -z "$last_tag" ]; then
+          next_tag="${VERSION_PREFIX}0001"
+        else
+          base_num=$(echo $last_tag | grep -o '[0-9]*$')
+          next_num=$(printf "%04d" $((10#$base_num + 1)))
+          next_tag="${VERSION_PREFIX}${next_num}"
+        fi
+        echo "👉 Nova tag: $next_tag"
+        echo "new_tag=$next_tag" >> "$GITHUB_OUTPUT"
 
-          if [[ -z "$latest_tag" ]]; then
-            new_tag="RC1-beta-v0001"
-          else
-            number=$(echo $latest_tag | grep -oE '[0-9]+$')
-            new_number=$(printf "%04d" $((10#$number + 1)))
-            new_tag="RC1-beta-v${new_number}"
-          fi
+    - name: 🐳 Login no DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-          echo "Nova versão: $new_tag"
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+    - name: 📦 Build da imagem Docker com Dockerfile gerado dinamicamente
+      run: |
+        cat << 'EOF' > Dockerfile
+        FROM ubuntu:22.04
 
-      - name: 🏷️ Criar e pushar nova tag
-        run: |
-          git config --global user.name "Elias Andrade - Replika AI"
-          git config --global user.email "chaos4455@users.noreply.github.com"
-          git tag ${{ steps.version.outputs.new_tag }}
-          git push origin ${{ steps.version.outputs.new_tag }}
+        ENV DEBIAN_FRONTEND=noninteractive
 
-      - name: 🛠️ Gerar Dockerfile dinâmico otimizado
-        run: |
-          cat <<EOF > Dockerfile
-          FROM ubuntu:22.04
-          ENV DEBIAN_FRONTEND=noninteractive
-          ENV TZ=Etc/UTC
+        RUN apt-get update && apt-get upgrade -y && \
+            apt-get install -y python3 python3-pip gcc libpq-dev build-essential \
+            openssh-server sudo ufw nano vim htop iftop net-tools curl wget unzip iputils-ping \
+            libpam0g-dev libpam-modules && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-          RUN apt-get update && apt-get upgrade -y && \
-              apt-get install -y --no-install-recommends \
-              python3 python3-pip gcc build-essential libpq-dev \
-              openssh-server sudo ufw nano vim htop iftop net-tools curl wget unzip \
-              iputils-ping libpam0g-dev libpam-modules ca-certificates tzdata && \
-              apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
+            echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && mkdir /var/run/sshd
 
-          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
-              echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && mkdir /var/run/sshd
+        RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
+            sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-          RUN sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+        WORKDIR /app
 
-          EXPOSE 22 8000 8080 8333 8777
-          WORKDIR /app
-          COPY . /app
-          RUN pip3 install --no-cache-dir -r requirements.txt || true
+        COPY requirements.txt .
+        COPY message-broker-v3-clean.py .
+        COPY webdash3-clean.py .
+        COPY geramensagem-v3-massive-loop.py .
+        COPY coleta-mensagem-v3-batch-lote.py .
 
-          CMD service ssh start && \
-              python3 message-broker-v3-clean.py & \
-              sleep 5 && \
-              python3 webdash3-clean.py & \
-              sleep 5 && \
-              python3 geramensagem-v3-massive-loop.py & \
-              sleep 5 && \
-              python3 coleta-mensagem-v3-batch-lote.py && \
-              tail -f /dev/null
-          EOF
+        RUN pip3 install --no-cache-dir -r requirements.txt
 
-      - name: 🔐 Login no Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: chaos4455
-          password: ${{ secrets.DOCKER_PASSWORD }}
+        EXPOSE 22 8000 8080 8333 8777
 
-      - name: 🧱 Build da imagem com tags
-        run: |
-          docker build -t chaos4455/message-broker-v3:latest -t chaos4455/message-broker-v3:${{ steps.version.outputs.new_tag }} .
+        CMD service ssh start && \
+            python3 message-broker-v3-clean.py & \
+            sleep 5 && \
+            python3 webdash3-clean.py & \
+            sleep 5 && \
+            python3 geramensagem-v3-massive-loop.py & \
+            sleep 5 && \
+            python3 coleta-mensagem-v3-batch-lote.py && \
+            tail -f /dev/null
+        EOF
 
-      - name: ☁️ Push imagem para Docker Hub
-        run: |
-          docker push chaos4455/message-broker-v3:latest
-          docker push chaos4455/message-broker-v3:${{ steps.version.outputs.new_tag }}
+        docker build -t $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }} .
+
+    - name: 📤 Push da imagem para DockerHub
+      run: |
+        docker tag $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }} $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:${{ steps.tag_version.outputs.new_tag }}
+        docker push $IMAGE_NAME:latest
+
+    - name: 🏷️ Criar e pushar tag de release
+      env:
+        GH_TOKEN: ${{ secrets.MASTERTOKEN }}
+      run: |
+        git config user.name "Elias Andrade - Replika AI"
+        git config user.email "chaos4455@users.noreply.github.com"
+        git tag ${{ steps.tag_version.outputs.new_tag }}
+        git remote set-url origin https://chaos4455:${GH_TOKEN}@github.com/${{ github.repository }}
+        git push origin ${{ steps.tag_version.outputs.new_tag }}
+
+  test-pipeline:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🐳 Instalar Docker
+      run: |
+        sudo apt-get update && sudo apt-get install -y docker.io
+        sudo systemctl start docker
+
+    - name: 🧪 Testar a imagem e verificar porta 8777
+      run: |
+        docker pull $IMAGE_NAME:${{ needs.build-and-push.outputs.new_tag }}
+        docker run -d --name test-container -p 8777:8777 $IMAGE_NAME:${{ needs.build-and-push.outputs.new_tag }}
+        sleep 10
+        if ss -tuln | grep :8777; then
+          echo "✅ Porta 8777 está ativa!"
+        else
+          echo "❌ Porta 8777 não está respondendo!"
+          exit 1
+        fi
