@@ -1,89 +1,120 @@
-name: 🚀 Build & Deploy Docker Image
+name: ✨ CI/CD Replika AI Message Broker
 
 on:
   push:
-    branches: [main]
+    branches: [ "main" ]
 
 env:
   IMAGE_NAME: chaos4455/message-broker-replika
   VERSION_PREFIX: RC1-beta-v
 
 jobs:
-  build:
+  build-and-push:
+    name: 📅 Build e Push da Imagem
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout
+      - name: 📂 Checkout do Repositório
         uses: actions/checkout@v4
 
-      - name: 🧠 Define nova versão
+      - name: 🔑 Configura Git com token de acesso
+        run: |
+          git config --global user.name "Elias Andrade - Replika AI"
+          git config --global user.email "chaos4455@users.noreply.github.com"
+
+      - name: 🔄 Define nova versão dinamicamente
         id: version
         run: |
-          PREFIX="RC1-beta-v"
-          git fetch --tags
-          LAST_TAG=$(git tag --sort=-v:refname | grep "^$PREFIX" | head -n 1 || echo "${PREFIX}0000")
-          NUMBER=$(echo $LAST_TAG | grep -oP '\d+$')
-          NEXT=$(printf "%04d" $((10#$NUMBER + 1)))
+          PREFIX="${{ env.VERSION_PREFIX }}"
+          git fetch --tags || true
+          LAST_TAG=$(git tag --sort=-v:refname | grep "^$PREFIX" | head -n 1 || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            NEXT="0001"
+          else
+            NUMBER=$(echo "$LAST_TAG" | grep -oP '\\d+$')
+            NEXT=$(printf "%04d" $((10#$NUMBER + 1)))
+          fi
           echo "version=${PREFIX}${NEXT}" >> $GITHUB_OUTPUT
+          echo "🔹 Versão gerada: ${PREFIX}${NEXT}"
 
-      - name: 🛠️ Gera Dockerfile dinamicamente
+      - name: 🚧 Gera Dockerfile dinamicamente
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && apt-get upgrade -y && apt-get install -y \\
-              python3 python3-pip gcc libpq-dev build-essential \\
-              openssh-server sudo ufw nano vim htop iftop net-tools \\
-              curl wget unzip iputils-ping libpam0g-dev libpam-modules \\
-              && apt-get clean && rm -rf /var/lib/apt/lists/*
+          RUN apt-get update && apt-get upgrade -y && apt-get install -y \
+              python3 python3-pip \
+              gcc libpq-dev build-essential \
+              openssh-server sudo ufw \
+              nano vim htop iftop net-tools curl wget unzip iputils-ping \
+              libpam0g-dev libpam-modules --no-install-recommends && \
+              apt-get clean && rm -rf /var/lib/apt/lists/*
 
-          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
+              echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
           RUN mkdir /var/run/sshd
 
-          RUN sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \\
-              sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
-              sed -i 's/^#\\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \\
-              sed -i 's/^#\\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+          RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+              sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+              sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
+              sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
           WORKDIR /app
+
           COPY requirements.txt .
-          COPY message-broker-v3-clean.py .
-          COPY webdash3-clean.py .
-          COPY geramensagem-v3-massive-loop.py .
-          COPY coleta-mensagem-v3-batch-lote.py .
+          COPY *.py ./
 
           RUN pip3 install --no-cache-dir -r requirements.txt
 
           EXPOSE 22 8000 8080 8333 8777
 
-          CMD service ssh start && \\
-              (python3 message-broker-v3-clean.py &) && \\
-              sleep 5 && (python3 webdash3-clean.py &) && \\
-              sleep 5 && (python3 geramensagem-v3-massive-loop.py &) && \\
-              sleep 5 && (python3 coleta-mensagem-v3-batch-lote.py &) && \\
+          CMD service ssh start && \
+              python3 message-broker-v3-clean.py & \
+              sleep 5 && python3 webdash3-clean.py & \
+              sleep 5 && python3 geramensagem-v3-massive-loop.py & \
+              sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \
               tail -f /dev/null
           EOF
 
-      - name: 🐳 Login no DockerHub
+      - name: 🔋 Login no Docker Hub
         uses: docker/login-action@v2
         with:
-          username: chaos4455
+          username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 📦 Build da imagem
+      - name: 💪 Build da Imagem Docker
         run: |
           docker build -t $IMAGE_NAME:${{ steps.version.outputs.version }} .
 
-      - name: ☁️ Push da imagem
+      - name: ⬆️ Push da imagem para DockerHub
         run: |
           docker push $IMAGE_NAME:${{ steps.version.outputs.version }}
 
-      - name: 🏷️ Cria e envia tag Git
+      - name: 🔖 Cria tag no Git
         env:
           GITHUB_TOKEN: ${{ secrets.MASTERTOKEN }}
         run: |
-          git config --global user.name "Elias Andrade - Replika AI"
-          git config --global user.email "chaos4455@users.noreply.github.com"
           git tag ${{ steps.version.outputs.version }}
-          git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/${{ github.repository }} --tags
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} --tags
+
+  test:
+    name: ✅ Testa imagem em container
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚧 Instala Docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+
+      - name: ⚡ Baixa e sobe o container
+        run: |
+          docker pull $IMAGE_NAME:${{ needs.build-and-push.outputs.version }}
+          docker run -d -p 8777:8777 --name teste_replika $IMAGE_NAME:${{ needs.build-and-push.outputs.version }}
+          sleep 10
+          docker ps
+          ss -ltnp | grep 8777
+
+# Assinado: Elias Andrade — Replika AI Solutions 🚀
