@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagrama de Arquitetura | projeto message broker replika ai v1 | Replika AI</title>
+    <style>
+        /* Reset Básico e Estilos Globais */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #232526 0%, #414345 74%);
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 60px 20px;
+            overflow-x: hidden;
+        }
+
+        /* Container Principal do Diagrama */
+        .diagram-container {
+            width: 95%;
+            max-width: 1200px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 25px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            perspective: 1800px;
+        }
+
+        /* Estilo das Camadas */
+        .layer {
+            padding: 30px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+            transform-style: preserve-3d;
+        }
+
+        .layer:hover {
+            /*transform: translateY(-3px) translateZ(8px);*/
+        }
+
+        /* Cores e Gradientes das Camadas */
+        .layer-api { background: linear-gradient(145deg, #00bcd4, #009688); } /* Teal */
+        .layer-queue { background: linear-gradient(145deg, #ff9800, #f57c00); } /* Laranja */
+        .layer-database { background: linear-gradient(145deg, #673ab7, #512da8); } /* Roxo */
+        .layer-collector { background: linear-gradient(145deg, #4caf50, #388e3c); } /* Verde */
+        .layer-webdash { background: linear-gradient(145deg, #ffc107, #ff9800); } /* Amarelo/Laranja */
+        .layer-security { background: linear-gradient(145deg, #f44336, #d32f2f); } /* Vermelho */
+
+        .layer-title {
+            font-size: 1.6em;
+            font-weight: 600;
+            color: #ffffff;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+            text-align: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Grid para os Componentes dentro das Camadas */
+        .components-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+
+        /* Estilo dos Componentes Individuais */
+        .component {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: #f0f8ff;
+            padding: 20px 16px;
+            border-radius: 14px;
+            font-size: 0.95em;
+            text-align: center;
+            box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            cursor: default;
+            transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+                        box-shadow 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+                        background-color 0.35s ease;
+            opacity: 0;
+            animation: fadeInScale 0.5s ease-out forwards;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80px;
+            transform-style: preserve-3d;
+            position: relative;
+        }
+
+        .component-desc {
+            font-size: 0.8em;
+            color: rgba(224, 224, 224, 0.7);
+            margin-top: 6px;
+            font-style: italic;
+        }
+
+        .component .tooltiptext {
+            visibility: hidden;
+            width: 220px; /* Aumentado para acomodar descrições maiores */
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 8px 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 110%;
+            left: 50%;
+            margin-left: -110px; /* Metade da nova largura */
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s;
+            font-size: 0.8em;
+            pointer-events: none;
+        }
+
+        .component:hover {
+            transform: scale(1.08) translateZ(18px) rotateY(3deg);
+            background-color: rgba(255, 255, 255, 0.28);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+        }
+
+        .component:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Animação Fade-in com Escala */
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Responsividade */
+        @media (max-width: 992px) {
+            .components-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        }
+        @media (max-width: 768px) {
+            .diagram-container { width: 95%; padding: 30px; }
+            .layer { padding: 25px; }
+            .layer-title { font-size: 1.4em; }
+            .component { font-size: 0.9em; padding: 16px 12px; min-height: 70px; }
+            .component-desc { font-size: 0.75em; }
+        }
+        @media (max-width: 480px) {
+            body { padding: 20px 10px; }
+            .diagram-container { border-radius: 15px; padding: 20px; }
+            .layer { border-radius: 12px; padding: 18px;}
+            .layer-title { font-size: 1.2em; }
+            .components-grid { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
+            .component { font-size: 0.8em; padding: 14px 10px; border-radius: 10px; min-height: 60px; }
+            .component-desc { display: none; }
+            .component .tooltiptext { display: none; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="diagram-container">
+
+        <!-- Camada API (FastAPI) -->
+        <div class="layer layer-api">
+            <div class="layer-title">Camada API (FastAPI)</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 0.1s;">
+                    Rotas de Filas
+                    <span class="component-desc">Criação/Gestão</span>
+                    <span class="tooltiptext">Endpoints para criar, listar e gerenciar filas de mensagens.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.15s;">
+                    Rotas de Mensagens
+                    <span class="component-desc">Publicação/Consumo</span>
+                    <span class="tooltiptext">Endpoints para publicar e consumir mensagens das filas.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.2s;">
+                    Autenticação
+                    <span class="component-desc">Login/Token</span>
+                    <span class="tooltiptext">Endpoints para autenticação de usuários e geração de tokens JWT.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.25s;">
+                    GraphQL Router
+                    <span class="component-desc">Queries/Mutações</span>
+                    <span class="tooltiptext">Router Strawberry para queries e mutações GraphQL.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.3s;">
+                    Middlewares
+                    <span class="component-desc">CORS/Rate Limit</span>
+                    <span class="tooltiptext">Middlewares para habilitar CORS e aplicar rate limiting.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camada de Filas de Mensagens -->
+        <div class="layer layer-queue">
+            <div class="layer-title">Camada de Filas de Mensagens</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 0.35s;">
+                    Queue (Tortoise Model)
+                    <span class="component-desc">Definição da Fila</span>
+                    <span class="tooltiptext">Modelo Tortoise ORM representando uma fila de mensagens.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.4s;">
+                    Message (Tortoise Model)
+                    <span class="component-desc">Definição da Mensagem</span>
+                    <span class="tooltiptext">Modelo Tortoise ORM representando uma mensagem na fila.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.45s;">
+                    Lógica de Enfileiramento
+                    <span class="component-desc">Publicação</span>
+                    <span class="tooltiptext">Funções para enfileirar mensagens e gerenciar o estado das filas.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.5s;">
+                    Lógica de Desinfileiramento
+                    <span class="component-desc">Consumo</span>
+                    <span class="tooltiptext">Funções para consumir mensagens e gerenciar o estado das filas.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camada de Banco de Dados -->
+        <div class="layer layer-database">
+            <div class="layer-title">Camada de Banco de Dados (SQLite)</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 0.55s;">
+                    message_broker_v3.db
+                    <span class="component-desc">Arquivo SQLite</span>
+                    <span class="tooltiptext">Arquivo de banco de dados SQLite principal do broker.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.6s;">
+                    Tabela 'queues'
+                    <span class="component-desc">Filas</span>
+                    <span class="tooltiptext">Tabela para armazenar informações sobre as filas. Colunas: id, name, created_at, updated_at.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.65s;">
+                    Tabela 'messages'
+                    <span class="component-desc">Mensagens</span>
+                    <span class="tooltiptext">Tabela para armazenar as mensagens. Colunas: id, content, status, created_at, updated_at, queue_id.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.7s;">
+                    Tortoise ORM
+                    <span class="component-desc">Mapeamento Objeto-Relacional</span>
+                    <span class="tooltiptext">Framework para interagir com o banco de dados de forma orientada a objetos.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.75s;">
+                    Scripts de Migração (dbfixv1.py, dbfixv2.py)
+                    <span class="component-desc">Correções de Schema</span>
+                    <span class="tooltiptext">Scripts para aplicar correções ao esquema do banco de dados.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camada de Coletores de Dados -->
+        <div class="layer layer-collector">
+            <div class="layer-title">Camada de Coletores de Dados</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 0.8s;">
+                    Coleta de Mensagens (coleta-mensagem-v*.py)
+                    <span class="component-desc">Scripts de Coleta</span>
+                    <span class="tooltiptext">Scripts para coletar mensagens das filas e salvar em arquivos JSON.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.85s;">
+                    Validação de Dados (test-json-data-collector-validation*)
+                    <span class="component-desc">Dados de Teste</span>
+                    <span class="tooltiptext">Arquivos JSON para validar a coleta de dados.</span>
+                </div>
+                <div class="component" style="animation-delay: 0.9s;">
+                    Coletores Batch
+                    <span class="component-desc">Processamento em Lote</span>
+                    <span class="tooltiptext">Scripts para coletar dados em lote e salvar em arquivos JSON.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camada de Dashboard Web -->
+        <div class="layer layer-webdash">
+            <div class="layer-title">Camada de Dashboard Web (Flask)</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 0.95s;">
+                    APIs de Dados (get_dashboard_data, get_log_data)
+                    <span class="component-desc">Endpoints</span>
+                    <span class="tooltiptext">Endpoints para fornecer dados ao frontend do dashboard.</span>
+                </div>
+                <div class="component" style="animation-delay: 1.0s;">
+                    Agendador (run_scheduler)
+                    <span class="component-desc">Atualização Automática</span>
+                    <span class="tooltiptext">Agendador para buscar dados da API e atualizar o estado do dashboard.</span>
+                </div>
+                <div class="component" style="animation-delay: 1.05s;">
+                    Templates HTML (render_template_string)
+                    <span class="component-desc">Renderização</span>
+                    <span class="tooltiptext">Templates HTML para renderizar a interface do dashboard.</span>
+                </div>
+                <div class="component" style="animation-delay: 1.1s;">
+                    DashboardState (Classe)
+                    <span class="component-desc">Estado do Dashboard</span>
+                    <span class="tooltiptext">Classe para armazenar o estado do dashboard (dados, erros, etc.).</span>
+                </div>
+            </div>
+        </div>
+
+         <!-- Camada de Segurança -->
+         <div class="layer layer-security">
+            <div class="layer-title">Camada de Segurança</div>
+            <div class="components-grid">
+                <div class="component" style="animation-delay: 1.15s;">
+                    Autenticação JWT
+                    <span class="component-desc">Tokens JWT</span>
+                    <span class="tooltiptext">Utiliza JSON Web Tokens (JWT) para autenticação e autorização.</span>
+                </div>
+                <div class="component" style="animation-delay: 1.2s;">
+                    Certificados SSL (certs_v3)
+                    <span class="component-desc">Comunicação Segura</span>
+                    <span class="tooltiptext">Certificados SSL para habilitar HTTPS e proteger a comunicação.</span>
+                </div>
+                <div class="component" style="animation-delay: 1.25s;">
+                    Rate Limiting
+                    <span class="component-desc">SlowAPI</span>
+                    <span class="tooltiptext">Utiliza SlowAPI para limitar a taxa de requisições e prevenir abusos.</span>
+                </div>
+            </div>
+         </div>
+
+    </div>
+
+    <!-- Script JS opcional -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const components = document.querySelectorAll('.component');
+            components.forEach((comp, index) => {
+                if (!comp.style.animationDelay) {
+                    comp.style.animationDelay = `${index * 0.05 + 0.1}s`;
+                }
+            });
+        });
+    </script>
+
+
+        
+
+</body>
+</html>

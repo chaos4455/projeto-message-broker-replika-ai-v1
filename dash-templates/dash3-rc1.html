@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrokerDash Pro RC1 - API Dashboard</title>
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><path d=%22M8.3 25L41.7 8.3L75 25L41.7 41.7L8.3 25Z%22 stroke=%22%23ff9800%22 stroke-width=%2210%22 fill=%22none%22/><path d=%22M8.3 75L41.7 58.3L75 75L41.7 91.7L8.3 75Z%22 stroke=%22%23ff5722%22 stroke-width=%2210%22 fill=%22none%22/><path d=%22M8.3 50H75%22 stroke=%22%23ffc107%22 stroke-width=%2210%22 fill=%22none%22/></svg>">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Embedded Styles -->
+    <style>
+        /* --- CSS Variables (Theme) --- */
+        :root {
+            --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-family-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+
+            --bg-dark: #121417;
+            --bg-medium: #1a1d21;
+            --bg-light: #23272f;
+            --bg-card: #1f2329;
+            --bg-tooltip: rgba(15, 17, 20, 0.95);
+            --bg-overlay: rgba(26, 29, 33, 0.7); /* Slightly transparent overlay */
+
+            --text-light: #e8eaf6;
+            --text-medium: #a0a8b8;
+            --text-dark: #6a7386;
+            --text-heading: #ffffff;
+            --text-inverse: #121417;
+
+            --border-color-strong: rgba(255, 255, 255, 0.15); /* Slightly stronger */
+            --border-color-medium: rgba(255, 255, 255, 0.1); /* Slightly stronger */
+            --border-color-light: rgba(255, 255, 255, 0.06); /* Slightly stronger */
+
+            /* Status & Accent Colors (Keep consistency) */
+            --status-success: #4caf50; --status-success-bg: rgba(76, 175, 80, 0.1); --status-success-border: rgba(76, 175, 80, 0.4);
+            --status-error: #f44336; --status-error-bg: rgba(244, 67, 54, 0.1); --status-error-border: rgba(244, 67, 54, 0.4);
+            --status-warning: #ff9800; --status-warning-bg: rgba(255, 152, 0, 0.1); --status-warning-border: rgba(255, 152, 0, 0.4);
+            --status-info: #2196f3; --status-info-bg: rgba(33, 150, 243, 0.1); --status-info-border: rgba(33, 150, 243, 0.4);
+            --status-processing: #5c6bc0; --status-processing-bg: rgba(92, 107, 192, 0.1); --status-processing-border: rgba(92, 107, 192, 0.4);
+            --status-debug: #00bcd4; --status-debug-bg: rgba(0, 188, 212, 0.1); --status-debug-border: rgba(0, 188, 212, 0.4);
+            --status-critical: #d32f2f; --status-critical-bg: rgba(211, 47, 47, 0.15); --status-critical-border: rgba(211, 47, 47, 0.5);
+
+            --accent-orange: var(--status-warning);
+            --accent-deep-orange: #ff5722;
+            --accent-yellow: #ffc107;
+            --accent-green: var(--status-success);
+            --accent-red: var(--status-error);
+            --accent-blue: var(--status-info);
+            --accent-cyan: var(--status-debug);
+            --accent-purple: #9c27b0;
+            --accent-indigo: var(--status-processing);
+            --accent-teal: #26a69a;
+
+            /* Gradients (Consistent with status colors where applicable) */
+            --gradient-red: linear-gradient(135deg, #f44336, #d32f2f);
+            --gradient-orange: linear-gradient(135deg, #ffa726, #fb8c00);
+            --gradient-yellow: linear-gradient(135deg, #ffeb3b, #fbc02d);
+            --gradient-green: linear-gradient(135deg, #66bb6a, #388e3c);
+            --gradient-blue: linear-gradient(135deg, #42a5f5, #1976d2);
+            --gradient-cyan: linear-gradient(135deg, #26c6da, #0097a7);
+            --gradient-purple: linear-gradient(135deg, #ab47bc, #7b1fa2);
+            --gradient-indigo: linear-gradient(135deg, #7986cb, #303f9f);
+            --gradient-grey: linear-gradient(135deg, #78909c, #546e7a);
+            --gradient-teal: linear-gradient(135deg, #4db6ac, #00897b);
+
+            --shadow-color: rgba(0, 0, 0, 0.35); /* Slightly darker shadow */
+            --card-shadow: 0 4px 10px var(--shadow-color);
+            --card-hover-shadow: 0 7px 20px var(--shadow-color);
+            --border-radius-sm: 4px;
+            --border-radius-md: 8px;
+            --border-radius-lg: 12px;
+
+            --transition-speed-fast: 0.15s;
+            --transition-speed-normal: 0.25s;
+            --transition-ease: ease-in-out;
+        }
+
+        /* --- Base & Resets --- */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; font-size: 100%; /* Base font size */ }
+        body {
+            font-family: var(--font-family-base);
+            background: var(--bg-dark);
+            color: var(--text-medium);
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            font-size: 0.875rem; /* 14px if base is 16px */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .container { width: 100%; max-width: 1920px; /* Wider max width */ margin: 0 auto; padding: 0 30px; /* More padding */ }
+        a { color: var(--accent-blue); text-decoration: none; transition: color var(--transition-speed-normal); }
+        a:hover { color: var(--status-info); }
+        code { font-family: var(--font-family-mono); background-color: var(--bg-medium); padding: 0.2em 0.5em; border-radius: var(--border-radius-sm); font-size: 0.9em; color: var(--accent-cyan); border: 1px solid var(--border-color-light); }
+        .loading-placeholder { color: var(--text-dark); font-style: italic; }
+
+        /* --- Utility Classes --- */
+        .text-success { color: var(--status-success); }
+        .text-error { color: var(--status-error); }
+        .text-warning { color: var(--status-warning); }
+        .text-info { color: var(--status-info); }
+        .text-muted { color: var(--text-dark); }
+        .font-mono { font-family: var(--font-family-mono); }
+        .hidden { display: none !important; }
+
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
+        @keyframes highlight-value { 0% { transform: scale(1); } 50% { transform: scale(1.07); color: var(--accent-yellow); } 100% { transform: scale(1); }}
+        @keyframes blinkCritical { 50% { background-color: rgba(211, 47, 47, 0.4); color: #fff; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-left: 5px; }
+
+
+        /* --- Header --- */
+        .app-header {
+            background: rgba(26, 29, 33, 0.9); /* More opaque */
+            backdrop-filter: blur(12px);
+            padding: 16px 0; /* Slightly more padding */
+            border-bottom: 1px solid var(--border-color-medium);
+            position: sticky; top: 0; z-index: 1000;
+        }
+        .header-content { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+        .logo { display: flex; align-items: center; color: var(--accent-orange); text-decoration: none; gap: 14px; }
+        .logo svg { width: 32px; height: 32px; transition: transform var(--transition-speed-normal) var(--transition-ease); }
+        .logo:hover svg { transform: rotate(-12deg) scale(1.05); }
+        .logo-text-main { font-weight: 700; font-size: 1.6rem; color: var(--text-heading); letter-spacing: -0.6px; }
+        .status-indicator {
+            font-size: 0.9rem; font-weight: 500; text-align: right;
+            transition: all var(--transition-speed-normal) var(--transition-ease);
+            padding: 9px 18px; border-radius: var(--border-radius-md);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 400px; border: 1px solid transparent;
+            cursor: default;
+        }
+        .status-indicator.live { color: var(--status-success); background-color: var(--status-success-bg); border-color: var(--status-success-border); }
+        .status-indicator.error { color: var(--status-error); background-color: var(--status-error-bg); border-color: var(--status-error-border); font-weight: 600; }
+        .status-indicator.stale { color: var(--status-warning); background-color: var(--status-warning-bg); border-color: var(--status-warning-border); }
+        .status-indicator.fetching { color: var(--status-info); background-color: var(--status-info-bg); border-color: var(--status-info-border); animation: pulse 1.5s infinite ease-in-out; }
+        .status-indicator.init { color: var(--text-dark); background-color: rgba(106, 115, 134, 0.1); border-color: rgba(106, 115, 134, 0.3); }
+
+
+        /* --- Main Layout --- */
+        .main-layout {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 30px; /* Increased gap */ padding: 40px 0; flex-grow: 1;
+        }
+        .section { display: contents; }
+        .section-title {
+            font-size: 1.6rem; font-weight: 600; color: var(--text-heading);
+            margin-bottom: 15px; padding-bottom: 18px;
+            border-bottom: 1px solid var(--border-color-medium);
+            grid-column: 1 / -1;
+            margin-top: 35px;
+        }
+        .section-title:first-of-type { margin-top: 0; }
+
+        /* --- Status Cards --- */
+        .status-card {
+            grid-column: span 2; /* 6 cards per row */
+            border-radius: var(--border-radius-lg);
+            box-shadow: var(--card-shadow);
+            overflow: hidden; display: flex; flex-direction: column;
+            border: 1px solid var(--border-color-light);
+            animation: fadeIn 0.5s ease-out forwards;
+            background: var(--bg-card);
+            transition: transform var(--transition-speed-normal) var(--transition-ease), box-shadow var(--transition-speed-normal) var(--transition-ease), border-color var(--transition-speed-normal);
+            position: relative;
+            color: var(--text-heading);
+            aspect-ratio: 5 / 4;
+            padding: 25px 30px;
+            background-image: var(--gradient-grey); /* Default */
+        }
+        .status-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--card-hover-shadow); border-color: var(--border-color-medium); }
+        .card-content { z-index: 1; display: flex; flex-direction: column; justify-content: space-between; height: 100%;}
+        .card-title { font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.85); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.9px; }
+        .card-value { font-size: 2.8rem; font-weight: 700; line-height: 1.1; color: #fff; display: block; margin-top: auto; text-shadow: 0 2px 5px rgba(0,0,0,0.45); transition: color var(--transition-speed-normal) ease, transform var(--transition-speed-normal) ease; }
+        .card-value.small { font-size: 2rem; }
+        .value-changed .card-value { animation: highlight-value 0.4s ease-out; }
+        .card-icon { position: absolute; bottom: 18px; right: 22px; font-size: 3.8em; opacity: 0.18; user-select: none; line-height: 1; color: #fff;}
+
+        /* Specific Card Backgrounds */
+        .card-bg-pending { background-image: var(--gradient-orange); }
+        .card-bg-processing { background-image: var(--gradient-blue); }
+        .card-bg-failed { background-image: var(--gradient-red); }
+        .card-bg-processed { background-image: var(--gradient-green); }
+        .card-bg-total-msgs { background-image: var(--gradient-cyan); }
+        .card-bg-total-queues { background-image: var(--gradient-purple); }
+        .card-bg-total-reqs { background-image: var(--gradient-indigo); }
+        .card-bg-uptime { background-image: var(--gradient-grey); }
+        .card-bg-cpu { background-image: var(--gradient-indigo); }
+        .card-bg-mem { background-image: var(--gradient-teal); }
+        .card-bg-error-rate { background-image: var(--gradient-red); }
+        .card-bg-files-threads { background-image: var(--gradient-grey); }
+
+        /* --- API Error Card --- */
+        .last-error-card {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, var(--status-error-bg), rgba(211, 47, 47, 0.3));
+            border: 1px solid var(--status-error-border);
+            color: #ffcdd2;
+            backdrop-filter: blur(5px);
+            aspect-ratio: auto;
+            padding: 25px 35px;
+        }
+        .last-error-card .card-title { color: #ff8a80; font-weight: 600; font-size: 1.1rem; }
+        .last-error-card .card-value { font-size: 1rem; line-height: 1.6; color: #ffdce0; font-weight: 400; white-space: pre-wrap; word-break: break-word; text-shadow: none; }
+        .error-timestamp { font-size: 0.85rem; color: var(--text-dark); margin-top: 15px; display: block; }
+
+        /* --- Chart Cards --- */
+        .chart-card {
+            grid-column: span 4; /* 3 charts per row */
+            background: var(--bg-card); border-radius: var(--border-radius-lg); padding: 30px 35px 35px 35px;
+            box-shadow: var(--card-shadow); border: 1px solid var(--border-color-light);
+            animation: fadeIn 0.6s ease-out forwards; display: flex; flex-direction: column;
+            transition: border-color var(--transition-speed-normal);
+        }
+        .chart-card:hover { border-color: var(--border-color-medium); }
+        .chart-title { font-size: 1.1rem; font-weight: 500; color: var(--text-light); margin-bottom: 30px; text-align: center; }
+        .chart-container { min-height: 340px; height: 100%; position: relative; flex-grow: 1; }
+        .chart-container canvas { display: block; width: 100%; height: 100%; }
+
+        /* --- Info/Table Cards --- */
+        .info-card {
+             grid-column: span 6; /* 2 info cards per row */
+             background: var(--bg-card); border-radius: var(--border-radius-lg); padding: 35px;
+             box-shadow: var(--card-shadow); border: 1px solid var(--border-color-light);
+             animation: fadeIn 0.7s ease-out forwards; display: flex; flex-direction: column;
+             font-size: 0.95rem;
+             transition: border-color var(--transition-speed-normal);
+        }
+        .info-card:hover { border-color: var(--border-color-medium); }
+        .info-title { font-size: 1.25rem; font-weight: 600; color: var(--text-heading); margin-bottom: 25px; }
+        .info-table { width: 100%; border-collapse: collapse; table-layout: fixed; /* Improve layout */ }
+        .info-table th, .info-table td { padding: 14px 10px; text-align: left; border-bottom: 1px solid var(--border-color-medium); vertical-align: top; line-height: 1.5; }
+        .info-table th { font-weight: 500; color: var(--text-medium); white-space: nowrap; padding-right: 30px; width: 38%; }
+        .info-table td { color: var(--text-light); word-break: break-word; }
+        .info-table tr:last-child th, .info-table tr:last-child td { border-bottom: none; }
+        .info-table td code { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; } /* Prevent long code overflow */
+        .table-loading td, .no-data { text-align: center; color: var(--text-dark); padding: 25px; font-style: italic; }
+
+        /* Disk Usage Bar */
+        .disk-usage-bar-container { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+        .disk-usage-header { display: flex; justify-content: space-between; font-size: 0.9em; color: var(--text-light); margin-bottom: 4px; }
+        .disk-usage-bar { background-color: rgba(0,0,0,0.35); height: 14px; border-radius: 7px; overflow: hidden; border: 1px solid var(--border-color-light);}
+        .disk-usage-fill { height: 100%; background-image: var(--gradient-green); transition: width 0.4s ease; border-radius: 6px; }
+        .disk-usage-fill.warn { background-image: var(--gradient-orange); }
+        .disk-usage-fill.crit { background-image: var(--gradient-red); }
+        .disk-usage-footer { font-size: 0.85em; color: var(--text-dark); text-align: right; }
+
+        /* Queues Table Specific */
+        .queues-table-wrapper { max-height: 400px; overflow-y: auto; margin: -15px; padding: 15px; scrollbar-width: thin; scrollbar-color: var(--text-dark) var(--bg-light); }
+        .queues-table-wrapper::-webkit-scrollbar { width: 8px; }
+        .queues-table-wrapper::-webkit-scrollbar-track { background: var(--bg-light); border-radius: 4px; }
+        .queues-table-wrapper::-webkit-scrollbar-thumb { background-color: var(--text-dark); border-radius: 4px; border: 2px solid var(--bg-light); }
+        #queue-count { font-weight: 600; color: var(--accent-purple); }
+
+        /* --- Log Viewer --- */
+        .log-viewer-card {
+            grid-column: 1 / -1; background: var(--bg-card); border-radius: var(--border-radius-lg);
+            padding: 30px 35px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color-light);
+            display: flex; flex-direction: column; margin-top: 15px;
+            transition: border-color var(--transition-speed-normal);
+        }
+        .log-viewer-card:hover { border-color: var(--border-color-medium); }
+        .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 20px;}
+        .log-title-section { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+        .log-title { font-size: 1.25rem; font-weight: 600; color: var(--text-heading); white-space: nowrap; }
+        .log-filename { font-family: var(--font-family-mono); font-size: 1rem; color: var(--text-light); background-color: var(--bg-medium); padding: 6px 14px; border-radius: var(--border-radius-sm); border: 1px solid var(--border-color-medium); }
+        .log-filename.na { color: var(--text-dark); font-style: italic; background-color: transparent; border-color: transparent; }
+
+        /* Log Controls */
+        .log-controls { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+        .log-controls .control-group { display: flex; align-items: center; gap: 12px;}
+        .log-controls label { font-size: 0.9rem; color: var(--text-medium); cursor: pointer; }
+        .log-controls input[type="checkbox"] { cursor: pointer; accent-color: var(--accent-orange); width: 17px; height: 17px; transform: translateY(2px); }
+        .log-controls input[type="text"], .log-controls select {
+            background-color: var(--bg-light); border: 1px solid var(--border-color-medium);
+            color: var(--text-light); padding: 9px 14px; border-radius: var(--border-radius-sm);
+            font-size: 0.9rem; transition: border-color var(--transition-speed-fast), box-shadow var(--transition-speed-fast);
+        }
+        .log-controls input[type="text"]:focus, .log-controls select:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.25); }
+        .log-controls input[type="text"] { font-family: var(--font-family-mono); width: 200px; }
+        .log-controls select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23a0a8b8'%3E%3Cpath fill-rule='evenodd' d='M8 11.5a.5.5 0 0 1-.354-.146l-4-4a.5.5 0 0 1 .708-.708L8 10.293l3.646-3.647a.5.5 0 0 1 .708.708l-4 4A.5.5 0 0 1 8 11.5z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; padding-right: 35px; }
+        .log-controls button {
+            background: var(--bg-light); color: var(--text-medium); border: 1px solid var(--border-color-medium);
+            padding: 9px 20px; border-radius: var(--border-radius-sm); cursor: pointer; font-size: 0.9rem; font-weight: 500;
+            transition: all var(--transition-speed-normal) var(--transition-ease); display: inline-flex; align-items: center; gap: 6px;
+        }
+        .log-controls button:hover:not(:disabled) { background-color: var(--bg-medium); color: var(--text-light); border-color: var(--text-medium); transform: translateY(-1px); }
+        .log-controls button:active:not(:disabled) { transform: translateY(0px) scale(0.98); }
+        .log-controls button:disabled { opacity: 0.45; cursor: not-allowed; background-color: var(--bg-light); border-color: var(--border-color-light); color: var(--text-dark); box-shadow: none; transform: none; }
+        .log-controls button .spinner { width: 0.8em; height: 0.8em; margin-left: 0; margin-right: 4px;} /* Spinner inside button */
+
+        /* Log Content Area */
+        .log-content-wrapper {
+            background-color: #141619; /* Even darker */
+            border: 1px solid var(--border-color-strong); border-radius: var(--border-radius-md);
+            flex-grow: 1; overflow: auto; max-height: 700px; /* Further increased height */
+            font-family: var(--font-family-mono); font-size: 0.9rem; line-height: 1.75; /* Slightly more line height */
+            margin-top: 15px;
+            position: relative;
+            scrollbar-width: thin; scrollbar-color: var(--text-dark) var(--bg-light);
+        }
+        .log-content-wrapper::-webkit-scrollbar { width: 10px; }
+        .log-content-wrapper::-webkit-scrollbar-track { background: var(--bg-light); border-radius: 5px; }
+        .log-content-wrapper::-webkit-scrollbar-thumb { background-color: var(--text-dark); border-radius: 5px; border: 2px solid var(--bg-light); }
+        .log-line { display: flex; padding: 3px 18px; border-bottom: 1px solid var(--border-color-light); white-space: pre-wrap; word-break: break-word; transition: background-color var(--transition-speed-fast) ease; }
+        .log-line:hover { background-color: rgba(255, 255, 255, 0.04); }
+        .log-line-timestamp { color: var(--text-dark); margin-right: 18px; user-select: none; min-width: 85px; padding-top: 1px;}
+        .log-line-level { font-weight: 600; margin-right: 15px; min-width: 85px; display: inline-block; text-transform: uppercase; text-align: right; }
+        .log-line-level.critical { color: var(--status-critical); animation: blinkCritical 1.2s infinite ease-in-out; }
+        .log-line-level.error { color: var(--status-error); }
+        .log-line-level.warning { color: var(--status-warning); }
+        .log-line-level.info { color: var(--status-info); }
+        .log-line-level.debug { color: var(--status-debug); }
+        .log-line-message { flex-grow: 1; color: var(--text-light); }
+        .log-highlight { background-color: rgba(255, 193, 7, 0.3); border-radius: 3px; box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.5); padding: 0 1px; }
+        .log-status-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; flex-direction: column; /* Center content vertically */ align-items: center; justify-content: center;
+            background-color: var(--bg-overlay);
+            color: var(--text-medium); font-size: 1.15rem; font-style: italic; text-align: center;
+            z-index: 10; pointer-events: none;
+            opacity: 0; transition: opacity var(--transition-speed-normal) ease; padding: 20px;
+        }
+        .log-status-overlay.visible { opacity: 1; pointer-events: auto; }
+        .log-status-overlay .spinner { font-size: 1.5em; margin-bottom: 15px; }
+
+        /* Log Status Text (Below Controls) */
+        .log-status-display { font-size: 0.9rem; color: var(--text-dark); text-align: right; min-height: 1.5em; padding-top: 8px; }
+
+        /* --- Footer --- */
+        .app-footer {
+            text-align: center; padding: 40px 0; margin-top: auto;
+            font-size: 0.9rem; color: var(--text-dark);
+            border-top: 1px solid var(--border-color-medium); background: var(--bg-medium);
+        }
+        .footer-status { font-weight: 500; display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; transition: color 0.3s ease; padding: 5px 10px; border-radius: var(--border-radius-sm);}
+        .footer-status.error { color: var(--status-error); background-color: var(--status-error-bg); }
+        .footer-status.success { color: var(--text-medium); }
+        .footer-status.stale { color: var(--status-warning); background-color: var(--status-warning-bg); }
+        .footer-status .status-icon { font-size: 1.1em; }
+
+        /* --- Responsive Design --- */
+        @media (max-width: 1700px) {
+            .status-card { grid-column: span 3; aspect-ratio: 4 / 3; } /* 4 cards */
+            .chart-card { grid-column: span 6; } /* 2 charts */
+            .info-card { grid-column: span 6; }
+        }
+        @media (max-width: 1300px) {
+             .container { padding: 0 20px; }
+             .main-layout { gap: 25px; padding: 30px 0; }
+             .status-card { grid-column: span 4; } /* 3 cards */
+             .card-value { font-size: 2.5rem; } .card-value.small { font-size: 1.8rem; }
+             .chart-card { grid-column: span 6; }
+             .info-card { grid-column: span 6; }
+        }
+        @media (max-width: 992px) {
+            .container { padding: 0 15px; }
+            .main-layout { gap: 20px; padding: 25px 0; }
+            .status-card { grid-column: span 6; aspect-ratio: 16 / 10; } /* 2 cards */
+            .card-value { font-size: 2.2rem; } .card-value.small { font-size: 1.7rem; }
+            .chart-card { grid-column: span 12; } /* 1 chart */
+            .info-card { grid-column: span 12; }
+            .section-title { font-size: 1.4rem; }
+            .log-header { flex-direction: column; align-items: stretch; gap: 15px;}
+            .log-controls { gap: 12px; }
+        }
+         @media (max-width: 768px) {
+             body { font-size: 0.8125rem; /* 13px */ }
+             .app-header { padding: 14px 0; }
+             .header-content { flex-direction: column; align-items: center; gap: 14px;}
+             .status-indicator { max-width: 95%; font-size: 0.85rem; }
+             .status-card { grid-column: span 6; aspect-ratio: auto; min-height: 135px;}
+             .card-value { font-size: 2rem; } .card-value.small { font-size: 1.6rem; }
+             .log-controls .control-group { width: 100%; flex-direction: column; align-items: stretch; gap: 10px; }
+             .log-controls input[type="text"], .log-controls select { width: 100%; }
+             .log-controls button { flex-grow: 1; text-align: center; justify-content: center; }
+             .log-content-wrapper { max-height: 550px; }
+             .info-table th { width: auto; white-space: normal;}
+             .info-table th, .info-table td { padding: 12px 8px; }
+         }
+        @media (max-width: 576px) {
+            .status-card { grid-column: span 12; } /* 1 card */
+            .card-value { font-size: 2.2rem; }
+            .chart-container { min-height: 300px; }
+            .log-controls { flex-direction: column; align-items: stretch; }
+            .info-table { table-layout: auto; } /* Allow table to adjust */
+            .info-table th, .info-table td { display: block; width: 100%; border-bottom: none; }
+            .info-table th { background-color: var(--bg-light); padding: 8px; border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0; border-bottom: 1px solid var(--border-color-strong); }
+            .info-table td { border-bottom: 1px solid var(--border-color-medium); padding: 10px 8px; }
+            .info-table tr:last-child td { border-bottom: none; }
+            .queues-table-wrapper, .disk-info-card .info-table td:last-child { border-bottom: 2px solid var(--border-color-strong); margin-bottom: 10px; } /* Separate rows visually */
+            .disk-usage-bar-container { padding: 10px 0; }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <div class="container">
+            <div class="header-content">
+                <a href="#" class="logo" title="BrokerDash Pro Home" onclick="location.reload(); return false;"> <!-- Simple reload on click -->
+                     <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.3 25L41.7 8.3L75 25L41.7 41.7L8.3 25Z" stroke="currentColor" stroke-width="10"/><path d="M8.3 75L41.7 58.3L75 75L41.7 91.7L8.3 75Z" stroke="var(--accent-deep-orange)" stroke-width="10"/><path d="M8.3 50H75" stroke="var(--accent-yellow)" stroke-width="10"/></svg>
+                    <span class="logo-text-main">BrokerDash Pro</span>
+                </a>
+                <div id="status-indicator" class="status-indicator init" title="Status of connection to backend API">Initializing...</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <main class="main-layout">
+            <!-- API Error Display -->
+            <div class="status-card last-error-card hidden" id="card-last-error"> <!-- Start hidden -->
+                 <div class="card-content">
+                     <div class="card-title">🚨 API Communication Error</div>
+                     <div class="card-value small" id="last-error-message">--</div>
+                     <div class="error-timestamp" id="last-error-timestamp"></div>
+                 </div>
+            </div>
+
+             <!-- Broker Status Section -->
+             <div class="section">
+                 <h2 class="section-title">Broker Message Status</h2>
+                 <div class="status-card card-bg-pending"><div class="card-content"><div class="card-title">Pending</div><div class="card-value" id="value-pending-msgs">--</div></div><div class="card-icon">📥</div></div>
+                 <div class="status-card card-bg-processing"><div class="card-content"><div class="card-title">Processing</div><div class="card-value" id="value-processing-msgs">--</div></div><div class="card-icon">⚙️</div></div>
+                 <div class="status-card card-bg-failed"><div class="card-content"><div class="card-title">Failed</div><div class="card-value" id="value-failed-msgs">--</div></div><div class="card-icon">❌</div></div>
+                 <div class="status-card card-bg-processed"><div class="card-content"><div class="card-title">Processed</div><div class="card-value" id="value-processed-msgs">--</div></div><div class="card-icon">✅</div></div>
+                 <div class="status-card card-bg-total-msgs"><div class="card-content"><div class="card-title">Total Msgs</div><div class="card-value" id="value-total-msgs">--</div></div><div class="card-icon">✉️</div></div>
+                 <div class="status-card card-bg-total-queues"><div class="card-content"><div class="card-title">Active Queues</div><div class="card-value" id="value-total-queues">--</div></div><div class="card-icon">📁</div></div>
+            </div>
+
+            <!-- API & System Performance Section -->
+             <div class="section">
+                 <h2 class="section-title">API Performance & System Health</h2>
+                 <div class="status-card card-bg-total-reqs"><div class="card-content"><div class="card-title">Total Requests</div><div class="card-value" id="value-total-requests">--</div></div><div class="card-icon">📈</div></div>
+                 <div class="status-card card-bg-error-rate"><div class="card-content"><div class="card-title" title="Percentage of 4xx/5xx responses in the last interval">HTTP Err Rate %</div><div class="card-value small" id="value-http-error-rate">--</div></div><div class="card-icon">🚦</div></div>
+                 <div class="status-card card-bg-cpu"><div class="card-content"><div class="card-title">API Process CPU %</div><div class="card-value small" id="value-process-cpu">--</div></div><div class="card-icon">⚙️</div></div>
+                 <div class="status-card card-bg-mem"><div class="card-content"><div class="card-title">API Process Mem</div><div class="card-value small" id="value-process-mem">--</div></div><div class="card-icon">🧠</div></div>
+                 <div class="status-card card-bg-cpu"><div class="card-content"><div class="card-title">System CPU %</div><div class="card-value small" id="value-system-cpu">--</div></div><div class="card-icon">💻</div></div>
+                 <div class="status-card card-bg-mem"><div class="card-content"><div class="card-title">System Mem %</div><div class="card-value small" id="value-system-mem">--</div></div><div class="card-icon">💾</div></div>
+                 <div class="status-card card-bg-uptime"><div class="card-content"><div class="card-title">API Uptime</div><div class="card-value small" id="value-uptime">--</div></div><div class="card-icon">⏳</div></div>
+                 <div class="status-card card-bg-files-threads"><div class="card-content"><div class="card-title" title="Number of open file descriptors / Number of threads for the API process">Open Files / Threads</div><div class="card-value small" id="value-files-threads">-- / --</div></div><div class="card-icon">📄</div></div>
+            </div>
+
+            <!-- Historical Trends Section -->
+            <div class="section">
+                 <h2 class="section-title">Historical Trends</h2>
+                 <div class="chart-card">
+                     <div class="chart-title">Message Throughput & Failures (Events/sec)</div>
+                     <div class="chart-container"><canvas id="ratesChart"></canvas></div>
+                 </div>
+                 <div class="chart-card">
+                     <div class="chart-title">Message Status Queue Size</div>
+                     <div class="chart-container"><canvas id="messageStatusChart"></canvas></div>
+                 </div>
+                 <div class="chart-card">
+                     <div class="chart-title">Resource Utilization (%)</div>
+                     <div class="chart-container"><canvas id="performanceChart"></canvas></div>
+                 </div>
+            </div>
+
+            <!-- Request Analysis Section -->
+            <div class="section">
+                 <h2 class="section-title">Request Analysis</h2>
+                 <div class="chart-card">
+                     <div class="chart-title">HTTP Status Code Distribution (Total)</div>
+                     <div class="chart-container"><canvas id="requestsByStatusChart"></canvas></div>
+                 </div>
+                 <div class="chart-card">
+                     <div class="chart-title">Top 15 API Routes by Request Count (Total)</div>
+                     <div class="chart-container"><canvas id="requestsByRouteChart"></canvas></div>
+                 </div>
+                  <div class="chart-card">
+                     <div class="chart-title">HTTP Error Rate (% over time)</div>
+                     <div class="chart-container"><canvas id="httpErrorRateChart"></canvas></div>
+                 </div>
+            </div>
+
+            <!-- System & Config Details Section -->
+             <div class="section">
+                 <h2 class="section-title">System & Configuration Details</h2>
+                 <div class="info-card" id="system-info-card">
+                     <div class="info-title">💻 System Information</div>
+                     <table class="info-table" id="system-info-table"><tbody class="table-loading"><tr><td colspan="2">Loading...</td></tr></tbody></table>
+                 </div>
+                 <div class="info-card" id="broker-info-card">
+                     <div class="info-title">🛠️ Broker Configuration</div>
+                     <table class="info-table" id="broker-info-table"><tbody class="table-loading"><tr><td colspan="2">Loading...</td></tr></tbody></table>
+                 </div>
+                 <div class="info-card" id="queues-info-card">
+                     <div class="info-title">📁 Queue Details (<span id="queue-count">0</span>)</div>
+                     <div class="queues-table-wrapper">
+                        <table class="info-table" id="queues-info-table">
+                           <thead><tr><th>Name</th><th>Total Msgs</th><th>Created</th></tr></thead>
+                           <tbody class="table-loading"><tr><td colspan="3">Loading...</td></tr></tbody>
+                        </table>
+                     </div>
+                 </div>
+                 <div class="info-card" id="disk-info-card">
+                      <div class="info-title">💾 Disk Usage</div>
+                      <table class="info-table" id="disk-info-table">
+                          <thead><tr><th>Mountpoint</th><th>Usage</th><th>Free Space</th></tr></thead>
+                          <tbody class="table-loading"><tr><td colspan="3">Loading...</td></tr></tbody>
+                      </table>
+                 </div>
+            </div>
+
+            <!-- Log Viewer Section -->
+             <div class="section">
+                 <h2 class="section-title">Log Viewer</h2>
+                 <div class="log-viewer-card">
+                      <div class="log-header">
+                         <div class="log-title-section">
+                             <span class="log-title">Current File:</span>
+                             <span class="log-filename na" id="log-filename-display">N/A</span>
+                         </div>
+                         <div class="log-controls">
+                            <div class="control-group">
+                               <input type="text" id="log-search-input" placeholder="Search logs..." aria-label="Search logs">
+                               <label for="log-filter-level">Level:</label>
+                               <select id="log-filter-level" aria-label="Filter logs by level">
+                                   <option value="">All</option>
+                                   <option value="critical">Critical</option>
+                                   <option value="error">Error</option>
+                                   <option value="warning">Warning</option>
+                                   <option value="info">Info</option>
+                                   <option value="debug">Debug</option>
+                               </select>
+                           </div>
+                            <div class="control-group">
+                                <label for="log-auto-refresh-toggle" title="Toggle automatic log refreshing">Auto-Refresh:</label>
+                                <input type="checkbox" id="log-auto-refresh-toggle" checked>
+                           </div>
+                           <div class="control-group">
+                                <button id="load-older-logs-btn" title="Load older log entries" disabled>
+                                    <span class="btn-text">Load Older</span>
+                                    <span class="spinner hidden"></span>
+                                </button>
+                                <button id="refresh-logs-btn" title="Fetch latest log entries now" disabled>
+                                    <span class="btn-text">Refresh Now</span>
+                                    <span class="spinner hidden"></span>
+                                </button>
+                           </div>
+                         </div>
+                     </div>
+                     <div class="log-status-display" id="log-status-text">Initializing...</div>
+                      <div class="log-content-wrapper" id="log-content-area" aria-live="polite">
+                          <!-- Log lines will be added here by JS -->
+                          <div class="log-status-overlay visible" id="log-status-overlay">
+                              <span class="spinner" style="font-size: 1.8em;"></span>
+                              Initializing Log Viewer...
+                          </div>
+                     </div>
+                 </div>
+            </div>
+
+        </main>
+    </div>
+
+    <footer class="app-footer">
+        BrokerDash Pro - Real-time API Metrics Dashboard
+        <div class="footer-status stale" id="footer-backend-status"><span class="status-icon">⏳</span>Initializing connection...</div>
+    </footer>
+
+    <!-- Configuration Data (Passed from Flask/Jinja2) -->
+    <script id="config-data" type="application/json">
+        {{ config_json | safe }}
+    </script>
+
+    <!-- Main Application Logic -->
+    <script>
+       // Ensure this entire script block is enclosed in {% raw %} ... {% endraw %} in the final template context
+       // But for this standalone file, no raw tags are needed here.
+
+        // --- Global JS State ---
+        const DateTime = luxon.DateTime;
+        let CONFIG = {}; // Loaded from #config-data
+        let chartInstances = {};
+        let fetchDataIntervalId = null;
+        let fetchLogIntervalId = null;
+        let lastKnownApiError = null;
+        let lastSuccessfulDataFetch = null;
+        let logAutoRefreshEnabled = true; // Default, synced via config/API
+        let currentLogFilename = null;
+        let canLoadOlderLogs = false;
+        let isFetchingDashboard = false;
+        let isFetchingLogs = false;
+        let logSearchTerm = '';
+        let logFilterLevel = '';
+        let logSearchDebounceTimeout = null;
+        let initialLoadComplete = false;
+        let dom = {}; // DOM Element Cache
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            console.info("BrokerDash Pro RC1: DOM Loaded. Initializing...");
+
+            // 1. Load Configuration
+            try {
+                const configElement = document.getElementById('config-data');
+                if (!configElement || !configElement.textContent) {
+                    throw new Error("Configuration script tag '#config-data' is missing or empty.");
+                }
+                CONFIG = JSON.parse(configElement.textContent);
+                // Basic validation of expected config keys
+                if (!CONFIG.API_DASHBOARD_DATA_URL || !CONFIG.POLLING_INTERVAL_MS) {
+                     throw new Error("Essential configuration keys (e.g., API_DASHBOARD_DATA_URL, POLLING_INTERVAL_MS) are missing.");
+                }
+                console.info("Configuration loaded:", CONFIG);
+                logAutoRefreshEnabled = CONFIG.LOG_AUTO_REFRESH_ENABLED_INIT; // Set initial state from config
+            } catch (e) {
+                console.error("FATAL: Could not parse or validate configuration data.", e);
+                displayFatalError("Configuration Error", `Could not load or parse dashboard configuration from server. Details: ${e.message}`);
+                return; // Stop initialization
+            }
+
+            // 2. Cache DOM & Initialize UI Components
+            cacheDOMElements();
+            initializeCharts();
+            setupEventListeners();
+            clearUI(); // Set initial state reflecting "loading"
+            updateStatusIndicator('init', 'Initializing...');
+
+            // 3. Start Fetching Data
+            fetchDashboardData(); // Initial high-level data fetch
+
+            // 4. Setup Polling Intervals
+            if (fetchDataIntervalId) clearInterval(fetchDataIntervalId);
+            fetchDataIntervalId = setInterval(fetchDashboardData, CONFIG.POLLING_INTERVAL_MS);
+            // Log timer starts conditionally based on state and config
+
+            console.info(`Polling dashboard data every ${CONFIG.POLLING_INTERVAL_MS / 1000}s.`);
+            console.info(`Log auto-refresh interval: ${CONFIG.LOG_REFRESH_INTERVAL_MS / 1000}s (Initial state: ${logAutoRefreshEnabled}).`);
+        });
+
+        function displayFatalError(title, message) {
+             document.body.innerHTML = `
+                <div style="padding: 40px; text-align: center; color: var(--text-light);">
+                    <h1 style="color: var(--status-error); margin-bottom: 20px;">${title}</h1>
+                    <p style="font-size: 1.1rem; line-height: 1.6;">${message}</p>
+                    <p style="margin-top: 30px; color: var(--text-medium);">Please check the browser console and server logs for more details.</p>
+                </div>`;
+        }
+
+
+        // --- DOM Caching (Keep as before, ensure all IDs match HTML) ---
+         function cacheDOMElements() { /* ... same as previous version ... */
+             dom = {
+                statusIndicator: document.getElementById('status-indicator'),
+                footerStatus: document.getElementById('footer-backend-status'),
+                lastErrorCard: document.getElementById('card-last-error'),
+                lastErrorMessage: document.getElementById('last-error-message'),
+                lastErrorTimestamp: document.getElementById('last-error-timestamp'),
+                // Cards
+                pendingMsgs: document.getElementById('value-pending-msgs'),
+                processingMsgs: document.getElementById('value-processing-msgs'),
+                failedMsgs: document.getElementById('value-failed-msgs'),
+                processedMsgs: document.getElementById('value-processed-msgs'),
+                totalMsgs: document.getElementById('value-total-msgs'),
+                totalQueues: document.getElementById('value-total-queues'),
+                totalRequests: document.getElementById('value-total-requests'),
+                httpErrorRate: document.getElementById('value-http-error-rate'),
+                uptime: document.getElementById('value-uptime'),
+                processCpu: document.getElementById('value-process-cpu'),
+                processMem: document.getElementById('value-process-mem'),
+                systemCpu: document.getElementById('value-system-cpu'),
+                systemMem: document.getElementById('value-system-mem'),
+                filesThreads: document.getElementById('value-files-threads'),
+                // Tables & Info
+                systemInfoTableBody: document.querySelector('#system-info-table tbody'),
+                brokerInfoTableBody: document.querySelector('#broker-info-table tbody'),
+                queuesInfoTableBody: document.querySelector('#queues-info-table tbody'),
+                diskInfoTableBody: document.querySelector('#disk-info-table tbody'),
+                queueCountSpan: document.getElementById('queue-count'),
+                // Charts (Canvas elements)
+                ratesChartCanvas: document.getElementById('ratesChart'),
+                messageStatusChartCanvas: document.getElementById('messageStatusChart'),
+                performanceChartCanvas: document.getElementById('performanceChart'),
+                requestsByRouteChartCanvas: document.getElementById('requestsByRouteChart'),
+                requestsByStatusChartCanvas: document.getElementById('requestsByStatusChart'),
+                httpErrorRateChartCanvas: document.getElementById('httpErrorRateChart'),
+                // Log Viewer
+                logFilenameDisplay: document.getElementById('log-filename-display'),
+                logContentArea: document.getElementById('log-content-area'),
+                logStatusText: document.getElementById('log-status-text'),
+                logStatusOverlay: document.getElementById('log-status-overlay'),
+                loadOlderLogsBtn: document.getElementById('load-older-logs-btn'),
+                refreshLogsBtn: document.getElementById('refresh-logs-btn'),
+                logAutoRefreshToggle: document.getElementById('log-auto-refresh-toggle'),
+                logSearchInput: document.getElementById('log-search-input'),
+                logFilterLevel: document.getElementById('log-filter-level'),
+            };
+            // Get contexts for charts
+             dom.ratesChartCtx = dom.ratesChartCanvas?.getContext('2d');
+             dom.messageStatusChartCtx = dom.messageStatusChartCanvas?.getContext('2d');
+             dom.performanceChartCtx = dom.performanceChartCanvas?.getContext('2d');
+             dom.requestsByRouteChartCtx = dom.requestsByRouteChartCanvas?.getContext('2d');
+             dom.requestsByStatusChartCtx = dom.requestsByStatusChartCanvas?.getContext('2d');
+             dom.httpErrorRateChartCtx = dom.httpErrorRateChartCanvas?.getContext('2d');
+             console.debug("DOM elements cached.");
+        }
+
+        // --- Formatters & Helpers (Keep as before) ---
+        /* ... safeGet, formatNumber, formatDecimal, formatPercentage, formatMemory, formatBytes, formatDateTime, formatRelativeTime, formatUptime, formatLoadAvg, formatFilesThreads, generateColors, getHttpStatusColor, escapeHtml ... */
+        function safeGet(obj, path, defaultValue = null) { if (!obj || typeof path !== 'string') return defaultValue; try { return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined && acc[key] !== null) ? acc[key] : defaultValue, obj); } catch (e) { return defaultValue; } }
+        function formatNumber(num) { const n = parseFloat(num); return (n === null || n === undefined || isNaN(n)) ? '--' : n.toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+        function formatDecimal(num, digits = 1) { const n = parseFloat(num); return (n === null || n === undefined || isNaN(n)) ? '--' : n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }); }
+        function formatPercentage(num) { const n = parseFloat(num); return (n === null || n === undefined || isNaN(n)) ? '--' : formatDecimal(n, 1) + '%'; }
+        function formatMemory(num, unit = 'MB') { return (num === null || num === undefined || isNaN(parseFloat(num))) ? '--' : `${formatDecimal(num, 1)} ${unit}`; }
+        function formatBytes(num) { const n = parseInt(num, 10); if (n === null || n === undefined || isNaN(n)) return '--'; const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']; if (n === 0) return '0 B'; const i = parseInt(Math.floor(Math.log(n) / Math.log(1024)), 10); if (i < 0 || i >= sizes.length) return `${n} B`; if (i === 0) return `${n} ${sizes[i]}`; return `${formatDecimal(n / (1024 ** i), 1)} ${sizes[i]}`; }
+        function formatDateTime(isoString, format = DateTime.DATETIME_SHORT_WITH_SECONDS) { if (!isoString) return '--'; try { const dt = DateTime.fromISO(isoString); return dt.isValid ? dt.toLocaleString(format) : isoString; } catch (e) { return isoString; } }
+        function formatRelativeTime(isoString) { if (!isoString) return '--'; try { const dt = DateTime.fromISO(isoString); return dt.isValid ? dt.toRelative() : 'invalid date'; } catch (e) { return 'invalid date'; } }
+        function formatUptime(uptimeStr) { return uptimeStr || '--'; }
+        function formatLoadAvg(loadTuple) { if (!Array.isArray(loadTuple) || loadTuple.length < 3) return '--'; return loadTuple.map(n => (n === null || n === undefined || isNaN(parseFloat(n))) ? '?' : parseFloat(n).toFixed(2)).join(', '); }
+        function formatFilesThreads(files, threads) { const f = formatNumber(files); const t = formatNumber(threads); return `${f} / ${t}`; }
+        function generateColors(count) { const base = ['#64b5f6','#81c784','#ffb74d','#e57373','#ba68c8','#4dd0e1','#fff176','#7986cb','#a1887f','#90a4ae','#ff8a65','#4db6ac','#9575cd','#f06292','#69f0ae']; return Array.from({ length: count }, (_, i) => base[i % base.length]); }
+        function getHttpStatusColor(code) { code = parseInt(code); if (code >= 500) return 'var(--status-error)'; if (code >= 400) return 'var(--status-warning)'; if (code >= 300) return 'var(--status-info)'; if (code >= 200) return 'var(--status-success)'; return 'var(--text-dark)'; }
+        function escapeHtml(unsafe) { return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+
+        // --- UI Update Functions (Keep as before, maybe slight tweaks) ---
+        /* ... updateCardValue, updateChartData, clearUI, setLogOverlay, initializeCharts, updateDashboardUI, populateTable, createDiskUsageBar, updateSystemInfoTable, updateBrokerInfoTable, updateQueuesTable, updateDiskInfoTable, updateRequestsByStatusChart, updateRequestsByRouteChart, updateLogViewerUI, createLogLineElement, applyLogFilterAndSearch, applyHighlighting, isScrolledToBottom, scrollToBottom, updateApiErrorUI, updateStatusIndicator ... */
+         function updateCardValue(element, newValue, formatter = formatNumber) { /* ... same ... */
+            if (!element) return;
+            try {
+                const formattedValue = formatter(newValue);
+                if (element.textContent !== formattedValue) {
+                    element.textContent = formattedValue;
+                    const card = element.closest('.status-card');
+                    if (card && card.classList.contains('value-changed')) {
+                       card.classList.remove('value-changed');
+                       void card.offsetWidth; // Trigger reflow
+                    }
+                    if (card) card.classList.add('value-changed');
+                    setTimeout(() => card?.classList.remove('value-changed'), 450);
+                }
+            } catch (e) {
+                console.error(`Error formatting/updating card value: ${e}`, element, newValue);
+                element.textContent = 'ERR';
+            }
+        }
+        function updateChartData(chartInstance, newLabels = [], newDatasetsData = []) { /* ... same ... */
+             if (!chartInstance?.config?._config) { console.warn("Attempted to update non-existent chart"); return; }
+             chartInstance.data.labels = newLabels;
+             chartInstance.data.datasets.forEach((dataset, index) => {
+                 const dataForDataset = (Array.isArray(newDatasetsData) && index < newDatasetsData.length && Array.isArray(newDatasetsData[index])) ? newDatasetsData[index] : [];
+                 dataset.data = dataForDataset;
+                  if ((chartInstance.config.type === 'doughnut' || chartInstance.config.type === 'pie' || chartInstance.config.type === 'bar') && dataset.backgroundColor) {
+                     if (chartInstance.canvas.id === 'requestsByStatusChart') {
+                         dataset.backgroundColor = newLabels.map(label => getHttpStatusColor(label));
+                         dataset.hoverBackgroundColor = dataset.backgroundColor;
+                     } else if (chartInstance.canvas.id === 'requestsByRouteChart') {
+                          dataset.backgroundColor = 'var(--accent-indigo)';
+                          dataset.hoverBackgroundColor = 'var(--accent-blue)';
+                     } else {
+                         dataset.backgroundColor = generateColors(dataForDataset.length);
+                         dataset.hoverBackgroundColor = dataset.backgroundColor;
+                     }
+                 }
+             });
+             chartInstance.update('none');
+        }
+         function clearUI() { /* ... same, ensure tables get 'table-loading' class ... */
+             console.log("Clearing UI to initial state.");
+             Object.values(dom).forEach(el => {
+                if (!el) return;
+                if (el.classList?.contains('card-value')) el.textContent = '--';
+                if (el.tagName === 'TBODY') {
+                    el.innerHTML = `<tr><td colspan="${el.closest('table')?.querySelector('thead tr')?.children.length || 2}" class="no-data loading-placeholder">(Waiting for data...)</td></tr>`;
+                    el.classList.add('table-loading'); // Add loading class
+                }
+                if (el.id === 'queue-count') el.textContent = '0';
+             });
+             if (dom.logFilenameDisplay) { dom.logFilenameDisplay.textContent = 'N/A'; dom.logFilenameDisplay.classList.add('na'); }
+             if (dom.logContentArea) { dom.logContentArea.innerHTML = ''; } // Clear log lines
+             if (dom.logStatusText) dom.logStatusText.textContent = 'Initializing...';
+             setLogOverlay('Initializing Log Viewer...', true); // Show initial overlay
+             if (dom.loadOlderLogsBtn) dom.loadOlderLogsBtn.disabled = true;
+             if (dom.refreshLogsBtn) dom.refreshLogsBtn.disabled = true;
+             if (dom.lastErrorCard) dom.lastErrorCard.classList.add('hidden'); // Hide error card
+             Object.values(chartInstances).forEach(chart => { if(chart) updateChartData(chart); });
+             lastKnownApiError = null;
+             lastSuccessfulDataFetch = null;
+             currentLogFilename = null;
+             canLoadOlderLogs = false;
+             initialLoadComplete = false; // Reset initial load flag if clearing UI
+         }
+         function setLogOverlay(message, isVisible, showSpinner = false) { /* ... same ... */
+            if (!dom.logStatusOverlay) return;
+             let content = '';
+             if (isVisible) {
+                 if (showSpinner) {
+                     content += `<span class="spinner" style="font-size: 1.8em; margin-bottom: 15px;"></span>`;
+                 }
+                 content += escapeHtml(message);
+                 dom.logStatusOverlay.innerHTML = content;
+                 dom.logStatusOverlay.classList.add('visible');
+             } else {
+                 dom.logStatusOverlay.classList.remove('visible');
+                 dom.logStatusOverlay.innerHTML = ''; // Clear content when hiding
+             }
+        }
+        function initializeCharts() { /* ... same ... */
+             console.log("Initializing charts...");
+             if (!dom.ratesChartCtx || !dom.messageStatusChartCtx || !dom.performanceChartCtx || !dom.requestsByRouteChartCtx || !dom.requestsByStatusChartCtx || !dom.httpErrorRateChartCtx) { console.error("One or more chart canvas elements not found."); return; }
+             Chart.defaults.color = 'var(--text-medium)';
+             Chart.defaults.borderColor = 'var(--border-color-medium)';
+             Chart.defaults.font.family = "var(--font-family-base)";
+             Chart.defaults.font.size = 11;
+             const commonTooltipOptions = { backgroundColor: 'var(--bg-tooltip)', titleFont: { weight: '600', size: 13 }, bodyFont: { size: 11 }, padding: 12, boxPadding: 6, cornerRadius: 4, borderColor: 'var(--border-color-strong)', borderWidth: 1, displayColors: true, usePointStyle: true };
+             const commonLegendOptions = { position: 'bottom', labels: { padding: 18, boxWidth: 10, font: { size: 11 }, usePointStyle: true } };
+             const commonXAxisOptions = { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 15, font: { size: 10 }, color: 'var(--text-dark)' }, grid: { display: false } };
+             const commonYAxisOptions = { ticks: { beginAtZero: true, font: { size: 10 }, precision: 0, color: 'var(--text-medium)' }, grid: { color: 'var(--border-color-medium)', drawTicks: false, borderDash: [3, 4] } };
+             // --- Rates Chart (Line) ---
+             const ratesOpts = { responsive: true, maintainAspectRatio: false, animation: { duration: 200 }, plugins: { legend: commonLegendOptions, tooltip: { ...commonTooltipOptions, mode: 'index', intersect: false } }, scales: { x: commonXAxisOptions, yReq: { ...commonYAxisOptions, type: 'linear', position: 'left', title: { display: false }, ticks:{color:'var(--accent-indigo)'} }, yProcFail: { ...commonYAxisOptions, type: 'linear', position: 'right', title: { display: false }, grid: { drawOnChartArea: false }, ticks:{color:'var(--accent-green)'} } }, elements: { line: { tension: 0.3, borderWidth: 2 }, point: { radius: 0, hitRadius: 10, hoverRadius: 5 } }, interaction: { mode: 'nearest', axis: 'x', intersect: false } };
+             chartInstances.rates = new Chart(dom.ratesChartCtx, { type: 'line', data: { labels: [], datasets: [ { label: 'Reqs/sec', data: [], borderColor: 'var(--accent-indigo)', backgroundColor: 'rgba(92, 107, 192, 0.1)', fill: false, yAxisID: 'yReq' }, { label: 'Proc/sec', data: [], borderColor: 'var(--accent-green)', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: false, yAxisID: 'yProcFail' }, { label: 'Fail/sec', data: [], borderColor: 'var(--accent-red)', backgroundColor: 'rgba(244, 67, 54, 0.1)', fill: false, yAxisID: 'yProcFail' } ] }, options: ratesOpts });
+             // --- Message Status Chart (Stacked Area) ---
+             const msgStatusOpts = { responsive: true, maintainAspectRatio: false, animation: { duration: 200 }, plugins: { legend: commonLegendOptions, tooltip: { ...commonTooltipOptions, mode: 'index', intersect: false } }, scales: { x: commonXAxisOptions, y: { ...commonYAxisOptions, stacked: true, title: { display: false } } }, elements: { line: { tension: 0.1, borderWidth: 1.5, fill: 'start' }, point: { radius: 0, hitRadius: 10, hoverRadius: 5 } }, interaction: { mode: 'index', axis: 'x', intersect: false } };
+             chartInstances.messageStatus = new Chart(dom.messageStatusChartCtx, { type: 'line', data: { labels: [], datasets: [ { label: 'Failed', data: [], borderColor: 'var(--status-error)', backgroundColor: 'rgba(244, 67, 54, 0.5)', order: 3 }, { label: 'Processing', data: [], borderColor: 'var(--status-processing)', backgroundColor: 'rgba(92, 107, 192, 0.5)', order: 2 }, { label: 'Pending', data: [], borderColor: 'var(--status-warning)', backgroundColor: 'rgba(255, 152, 0, 0.5)', order: 1 }, ] }, options: msgStatusOpts });
+             // --- Performance Chart (Line, Multi-Axis) ---
+             const perfOpts = { responsive: true, maintainAspectRatio: false, animation: { duration: 200 }, plugins: { legend: commonLegendOptions, tooltip: { ...commonTooltipOptions, mode: 'index', intersect: false } }, scales: { x: commonXAxisOptions, yCpu: { ...commonYAxisOptions, type: 'linear', position: 'left', title: { display: true, text: 'CPU (%)', color: 'var(--accent-cyan)', font:{size:10, weight:'500'} }, ticks: { color: 'var(--accent-cyan)', precision: 1 }, grid: { color: 'rgba(0, 188, 212, 0.1)' } }, yMem: { ...commonYAxisOptions, type: 'linear', position: 'right', title: { display: true, text: 'Memory (%)', color: 'var(--accent-teal)', font:{size:10, weight:'500'} }, ticks: { color: 'var(--accent-teal)', precision: 1 }, grid: { drawOnChartArea: false } } }, elements: { line: { tension: 0.3, borderWidth: 2 }, point: { radius: 0, hitRadius: 10, hoverRadius: 5 } }, interaction: { mode: 'index', axis: 'x', intersect: false } };
+             chartInstances.performance = new Chart(dom.performanceChartCtx, { type: 'line', data: { labels: [], datasets: [ { label: 'API Process CPU %', data: [], borderColor: 'var(--accent-cyan)', yAxisID: 'yCpu', backgroundColor: 'rgba(0, 188, 212, 0.1)', fill: 'start' }, { label: 'System CPU %', data: [], borderColor: 'var(--accent-blue)', yAxisID: 'yCpu', backgroundColor: 'rgba(33, 150, 243, 0.1)', fill: 'start' }, { label: 'System Memory %', data: [], borderColor: 'var(--accent-teal)', yAxisID: 'yMem', backgroundColor: 'rgba(38, 166, 154, 0.1)', fill: 'start' } ] }, options: perfOpts });
+             // --- Requests by Route (Horizontal Bar) ---
+             const routeOpts = { responsive: true, maintainAspectRatio: false, indexAxis: 'y', animation: { duration: 300 }, plugins: { legend: { display: false }, tooltip: { ...commonTooltipOptions, mode: 'index', intersect: true, callbacks: { label: (context) => ` Count: ${formatNumber(context.parsed.x)}` } } }, scales: { x: { ...commonYAxisOptions, title:{ display: true, text: 'Total Requests', font:{size: 10} } }, y: { ...commonXAxisOptions, ticks: { font: { size: 10 }, color:'var(--text-medium)' }, grid: { display: false } } } };
+             chartInstances.requestsByRoute = new Chart(dom.requestsByRouteChartCtx, { type: 'bar', data: { labels: [], datasets: [{ label: 'Count', data: [], backgroundColor: 'var(--accent-indigo)', hoverBackgroundColor: 'var(--accent-blue)', borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.7 }] }, options: routeOpts });
+             // --- Requests by Status (Doughnut) ---
+             const statusOpts = { responsive: true, maintainAspectRatio: false, animation: { duration: 300, animateRotate: true, animateScale: true }, cutout: '65%', plugins: { legend: { position: 'right', labels: { padding: 15, boxWidth: 12, font: { size: 11 } } }, tooltip: { ...commonTooltipOptions, callbacks: { label: (context) => ` ${context.label}: ${formatNumber(context.parsed)} (${((context.parsed / context.chart.getDatasetMeta(0).total) * 100).toFixed(1)}%)` } } } };
+             chartInstances.requestsByStatus = new Chart(dom.requestsByStatusChartCtx, { type: 'doughnut', data: { labels: [], datasets: [{ label: 'Count', data: [], backgroundColor: [], borderWidth: 2, borderColor: 'var(--bg-card)', hoverOffset: 12, hoverBorderColor: 'var(--text-light)' }] }, options: statusOpts });
+             // --- HTTP Error Rate Chart (Line) ---
+             const errRateOpts = { responsive: true, maintainAspectRatio: false, animation: { duration: 200 }, plugins: { legend: { display: false }, tooltip: { ...commonTooltipOptions, mode: 'index', intersect: false, callbacks: { label: (context) => ` ${context.dataset.label}: ${formatDecimal(context.parsed.y, 1)}%` } } }, scales: { x: commonXAxisOptions, y: { ...commonYAxisOptions, suggestedMax: 10, title: { display: true, text: 'Error Rate (%)', font:{size: 10}}, ticks: { callback: (value) => value + '%' } } }, elements: { line: { tension: 0.2, borderWidth: 2 }, point: { radius: 0, hitRadius: 10, hoverRadius: 5 } }, interaction: { mode: 'index', axis: 'x', intersect: false } };
+             chartInstances.httpErrorRate = new Chart(dom.httpErrorRateChartCtx, { type: 'line', data: { labels: [], datasets: [{ label: 'HTTP Err % (4xx+)', data: [], borderColor: 'var(--accent-red)', backgroundColor: 'rgba(244, 67, 54, 0.2)', fill: true }] }, options: errRateOpts });
+             console.info("All charts initialized.");
+        }
+         function updateDashboardUI(data) { /* ... same, ensure table bodies have 'table-loading' class removed ... */
+            console.debug("Updating dashboard UI with data:", data);
+             // Remove loading state from tables
+             [dom.systemInfoTableBody, dom.brokerInfoTableBody, dom.queuesInfoTableBody, dom.diskInfoTableBody].forEach(tbody => {
+                 tbody?.classList.remove('table-loading');
+             });
+             // --- Cards Update ---
+            if (data.latest_stats) {
+                const stats = data.latest_stats;
+                const sys = stats.system || {};
+                updateCardValue(dom.pendingMsgs, safeGet(stats, 'messages_pending'));
+                updateCardValue(dom.processingMsgs, safeGet(stats, 'messages_processing'));
+                updateCardValue(dom.failedMsgs, safeGet(stats, 'messages_failed'));
+                updateCardValue(dom.processedMsgs, safeGet(stats, 'messages_processed'));
+                updateCardValue(dom.totalMsgs, safeGet(stats, 'messages_total'));
+                updateCardValue(dom.totalRequests, safeGet(stats, 'requests_total'));
+                updateCardValue(dom.uptime, safeGet(stats, 'uptime_str'), formatUptime);
+                updateCardValue(dom.processCpu, safeGet(sys, 'process_cpu_percent'), formatPercentage);
+                updateCardValue(dom.processMem, safeGet(sys, 'process_memory_mb'), (v) => formatMemory(v, 'MB'));
+                updateCardValue(dom.systemCpu, safeGet(sys, 'cpu_percent'), formatPercentage);
+                updateCardValue(dom.systemMem, safeGet(sys, 'memory_percent'), formatPercentage);
+                updateCardValue(dom.filesThreads, formatFilesThreads(safeGet(sys, 'process_num_fds'), safeGet(sys, 'process_num_threads')), v => v);
+                const errorRateHistory = safeGet(data, 'history.http_error_rate_history', []);
+                updateCardValue(dom.httpErrorRate, errorRateHistory[errorRateHistory.length - 1], formatPercentage);
+            } else { console.warn("No 'latest_stats' data found in response."); }
+             updateCardValue(dom.totalQueues, data.latest_queues?.length);
+             // --- Info Tables Update ---
+            updateSystemInfoTable(safeGet(data, 'latest_stats.system', {}));
+            updateBrokerInfoTable(safeGet(data, 'latest_stats.broker_config', {}));
+            updateQueuesTable(data.latest_queues || []);
+            updateDiskInfoTable(safeGet(data, 'latest_stats.system.disk_usage', []));
+             // --- Charts Update ---
+            if (data.history) {
+                 const hist = data.history;
+                 updateChartData(chartInstances.rates, hist.time_labels, [hist.request_rate_history, hist.processed_rate_history, hist.failed_rate_history]);
+                 updateChartData(chartInstances.messageStatus, hist.time_labels, [ safeGet(hist, 'message_status.failed', []), safeGet(hist, 'message_status.processing', []), safeGet(hist, 'message_status.pending', []), ]);
+                  updateChartData(chartInstances.performance, hist.time_labels, [ safeGet(hist, 'performance.process_cpu', []), safeGet(hist, 'performance.system_cpu', []), safeGet(hist, 'performance.system_memory', []), ]);
+                 updateChartData(chartInstances.httpErrorRate, hist.time_labels, [hist.http_error_rate_history]);
+                if(data.latest_stats) {
+                    updateRequestsByStatusChart(safeGet(data.latest_stats, 'requests_by_status', {}));
+                    updateRequestsByRouteChart(safeGet(data.latest_stats, 'requests_by_route', {}));
+                }
+            } else { console.warn("No 'history' data found in response."); }
+        }
+        function populateTable(tbodyElement, dataRows, columns) { /* ... same ... */
+             if (!tbodyElement) return;
+             tbodyElement.innerHTML = ''; // Clear existing rows
+             tbodyElement.classList.remove('table-loading'); // Ensure loading class is removed
+             if (!dataRows || dataRows.length === 0) {
+                 tbodyElement.innerHTML = `<tr><td colspan="${columns.length}" class="no-data">(No data available)</td></tr>`;
+                 return;
+             }
+             dataRows.forEach(rowData => {
+                 const tr = tbodyElement.insertRow();
+                 columns.forEach(col => {
+                     const td = tr.insertCell();
+                     let value = safeGet(rowData, col.key, '--');
+                     if (col.formatter) { value = col.formatter(value, rowData); }
+                     if (typeof value === 'string' && (value.includes('<') || value.includes('&'))) { td.innerHTML = value; } // Basic HTML check
+                     else { td.textContent = value; }
+                     if(col.class) td.classList.add(col.class);
+                 });
+             });
+         }
+         function createDiskUsageBar(usageData) { /* ... Updated style/structure ... */
+             const percent = parseFloat(safeGet(usageData, 'percent', 0));
+             const used = formatBytes(safeGet(usageData, 'used'));
+             const free = formatBytes(safeGet(usageData, 'free'));
+             let barClass = '';
+             if (percent > 90) barClass = 'crit';
+             else if (percent > 75) barClass = 'warn';
+             return `
+                 <div class="disk-usage-bar-container">
+                      <div class="disk-usage-header">
+                           <span>${formatDecimal(percent, 1)}% Used</span>
+                           <span class="text-muted">${used}</span>
+                      </div>
+                     <div class="disk-usage-bar">
+                         <div class="disk-usage-fill ${barClass}" style="width: ${percent}%;" title="${formatDecimal(percent, 1)}% Used"></div>
+                     </div>
+                     <div class="disk-usage-footer">${free} Free</div>
+                 </div>`;
+         }
+        function updateSystemInfoTable(sysData) { /* ... same, uses populateTable or manual rows ... */
+             if (dom.systemInfoTableBody) {
+                 dom.systemInfoTableBody.innerHTML = ''; // Clear first
+                 dom.systemInfoTableBody.classList.remove('table-loading');
+                 const info = [
+                      { label: 'Hostname', value: safeGet(sysData, 'hostname', '--') },
+                      { label: 'Operating System', value: safeGet(sysData, 'os_platform', '--') },
+                      { label: 'CPU Cores', value: safeGet(sysData, 'cpu_cores', '--') },
+                      { label: 'Load Average', value: formatLoadAvg(safeGet(sysData, 'load_average')) },
+                      { label: 'Total Memory', value: formatBytes(safeGet(sysData, 'memory_total')) },
+                      { label: 'Available Memory', value: formatBytes(safeGet(sysData, 'memory_available')) },
+                      { label: 'Python Version', value: safeGet(sysData, 'python_version', '--') },
+                      { label: 'Dashboard Uptime', value: formatRelativeTime(safeGet(sysData, 'dashboard_start_time')) }
+                 ];
+                 info.forEach(item => {
+                     if (item.value !== '--' && item.value !== null && item.value !== undefined && item.value !== '') {
+                          const tr = dom.systemInfoTableBody.insertRow();
+                          const th = document.createElement('th'); th.textContent = item.label; tr.appendChild(th);
+                          const td = tr.insertCell(); td.textContent = item.value;
+                     }
+                 });
+                  if (dom.systemInfoTableBody.rows.length === 0) { dom.systemInfoTableBody.innerHTML = `<tr><td colspan="2" class="no-data">(No system info)</td></tr>`; }
+             }
+        }
+        function updateBrokerInfoTable(brokerData) { /* ... same ... */
+              if (dom.brokerInfoTableBody) {
+                  dom.brokerInfoTableBody.innerHTML = '';
+                  dom.brokerInfoTableBody.classList.remove('table-loading');
+                  const info = Object.entries(brokerData || {}).map(([key, value]) => ({ label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: value }));
+                  info.forEach(item => {
+                     const tr = dom.brokerInfoTableBody.insertRow();
+                     const th = document.createElement('th'); th.textContent = item.label; tr.appendChild(th);
+                     const td = tr.insertCell();
+                     if (typeof item.value === 'object' && item.value !== null) { td.innerHTML = `<code>${escapeHtml(JSON.stringify(item.value))}</code>`; }
+                     else { td.textContent = String(item.value); }
+                 });
+                 if (dom.brokerInfoTableBody.rows.length === 0) { dom.brokerInfoTableBody.innerHTML = `<tr><td colspan="2" class="no-data">(No broker config)</td></tr>`; }
+             }
+        }
+        function updateQueuesTable(queuesData) { /* ... same ... */
+             if(dom.queueCountSpan) dom.queueCountSpan.textContent = queuesData.length;
+             populateTable(dom.queuesInfoTableBody, queuesData, [
+                 { key: 'name', label: 'Name', formatter: (val) => `<code>${escapeHtml(val)}</code>` },
+                 { key: 'messages_total', label: 'Total Msgs', formatter: formatNumber },
+                 { key: 'created_at', label: 'Created', formatter: formatRelativeTime }
+             ]);
+         }
+        function updateDiskInfoTable(diskData) { /* ... uses updated createDiskUsageBar ... */
+             populateTable(dom.diskInfoTableBody, diskData, [
+                 { key: 'mountpoint', label: 'Mountpoint', formatter: (val) => `<code>${escapeHtml(val)}</code>` },
+                 { key: 'percent', label: 'Usage', formatter: (val, row) => createDiskUsageBar(row) },
+                 { key: 'free', label: 'Free Space', formatter: formatBytes }
+             ]);
+         }
+        function updateRequestsByStatusChart(reqByStatus) { /* ... same ... */
+             if (!chartInstances.requestsByStatus || !reqByStatus) return;
+             const labels = Object.keys(reqByStatus).sort((a,b) => parseInt(a) - parseInt(b));
+             const data = labels.map(status => reqByStatus[status]);
+             updateChartData(chartInstances.requestsByStatus, labels, [data]);
+         }
+        function updateRequestsByRouteChart(reqByRoute) { /* ... same ... */
+             if (!chartInstances.requestsByRoute || !reqByRoute) return;
+             const sortedRoutes = Object.entries(reqByRoute).sort(([, countA], [, countB]) => countB - countA).slice(0, 15);
+             const labels = sortedRoutes.map(([route]) => route);
+             const data = sortedRoutes.map(([, count]) => count);
+             updateChartData(chartInstances.requestsByRoute, labels, [data]);
+         }
+        function updateLogViewerUI(logData, wasPrepended) { /* ... same with minor overlay tweaks ... */
+             if (!dom.logContentArea) return;
+             const { lines = [], filename = null } = logData;
+             const isInitialForFile = !dom.logContentArea.querySelector('.log-line'); // Check if area is empty before adding
+             const shouldPreserveScroll = !wasPrepended && isScrolledToBottom(dom.logContentArea);
+
+             if (filename !== currentLogFilename) { // Handle file change
+                 dom.logContentArea.innerHTML = ''; // Clear existing content
+                 currentLogFilename = filename; // Update local cache
+                 if (dom.logFilenameDisplay) {
+                     dom.logFilenameDisplay.textContent = currentLogFilename || 'N/A';
+                     dom.logFilenameDisplay.classList.toggle('na', !currentLogFilename);
+                 }
+                 setLogOverlay(filename ? `Loading logs for ${filename}...` : 'No log file selected.', true, !!filename);
+             }
+
+             if (lines.length > 0) {
+                 setLogOverlay('', false); // Hide overlay once lines arrive
+                 const fragment = document.createDocumentFragment();
+                 lines.forEach(lineData => {
+                     const lineElement = createLogLineElement(lineData);
+                     if (lineElement) { fragment.appendChild(lineElement); }
+                 });
+
+                 if (wasPrepended) { // Append older logs to the top
+                      const firstChild = dom.logContentArea.firstChild;
+                     dom.logContentArea.insertBefore(fragment, firstChild);
+                 } else { // Append newer logs to the bottom
+                     dom.logContentArea.appendChild(fragment);
+                 }
+                  applyLogFilterAndSearch(); // Filter/search new lines
+             } else if (isInitialForFile && !isFetchingLogs) { // No lines received on first fetch for this file
+                 setLogOverlay(currentLogFilename ? `Log file '${currentLogFilename}' appears empty or filter matches no lines.` : 'No log file selected.', true);
+             }
+
+             // Trim excess log lines (if needed, implement logic similar to previous version)
+             // const maxLogLinesInDom = CONFIG.LOG_CHUNK_SIZE * 5;
+             // while (dom.logContentArea.children.length > maxLogLinesInDom) { ... }
+
+             if (shouldPreserveScroll && !wasPrepended) { scrollToBottom(dom.logContentArea); }
+             if (dom.logStatusText && !logData.log_fetch_error) { dom.logStatusText.textContent = `Last updated: ${DateTime.now().toFormat('HH:mm:ss')}`; }
+        }
+        function createLogLineElement(lineData) { /* ... same ... */
+             if (!lineData || typeof lineData !== 'object') { return null; }
+             const { timestamp, level = 'info', message = '' } = lineData;
+             const lineDiv = document.createElement('div'); lineDiv.classList.add('log-line'); lineDiv.dataset.level = level.toLowerCase();
+             const timeSpan = document.createElement('span'); timeSpan.classList.add('log-line-timestamp'); timeSpan.textContent = timestamp ? DateTime.fromISO(timestamp).toFormat('HH:mm:ss.SSS') : '??:??:??'; lineDiv.appendChild(timeSpan);
+             const levelSpan = document.createElement('span'); levelSpan.classList.add('log-line-level', level.toLowerCase()); levelSpan.textContent = level.toUpperCase(); lineDiv.appendChild(levelSpan);
+             const msgSpan = document.createElement('span'); msgSpan.classList.add('log-line-message'); msgSpan.textContent = message; applyHighlighting(msgSpan, message, logSearchTerm); lineDiv.appendChild(msgSpan); // Apply highlighting immediately
+             return lineDiv;
+        }
+         function applyLogFilterAndSearch() { /* ... same ... */
+             if (!dom.logContentArea) return;
+             const searchTerm = logSearchTerm.toLowerCase();
+             const filterLevel = logFilterLevel;
+             let visibleCount = 0;
+             const lines = dom.logContentArea.querySelectorAll('.log-line');
+             lines.forEach(line => {
+                 const lineLevel = line.dataset.level || 'info';
+                 const lineMessageElement = line.querySelector('.log-line-message');
+                 const lineMessage = lineMessageElement ? lineMessageElement.textContent.toLowerCase() : '';
+                 const levelMatch = !filterLevel || (filterLevel === lineLevel);
+                 const searchMatch = !searchTerm || lineMessage.includes(searchTerm);
+                 if (levelMatch && searchMatch) {
+                     line.classList.remove('hidden'); visibleCount++;
+                     if (lineMessageElement) { applyHighlighting(lineMessageElement, lineMessageElement.textContent, searchTerm); }
+                 } else {
+                     line.classList.add('hidden');
+                      if (lineMessageElement) { applyHighlighting(lineMessageElement, lineMessageElement.textContent, ''); }
+                 }
+             });
+             console.debug(`Log filter applied. Visible: ${visibleCount}/${lines.length}. Level='${filterLevel}', Search='${searchTerm}'`);
+             // Show overlay if no lines are visible *after* filtering, but logs exist
+              if (visibleCount === 0 && lines.length > 0 && !isFetchingLogs) {
+                   setLogOverlay(`No log lines match the current filter (Level: ${filterLevel || 'All'}, Search: "${searchTerm || 'None'}")`, true);
+              } else if (visibleCount > 0) {
+                   // Ensure overlay is hidden if lines become visible
+                   setLogOverlay('', false);
+              }
+              // If lines.length is 0, the overlay might be handled by updateLogViewerUI or fetchLogData
+         }
+         function applyHighlighting(element, originalText, searchTerm) { /* ... same ... */
+             if (!element) return;
+             if (!searchTerm || searchTerm.length < 1) { element.innerHTML = escapeHtml(originalText); return; } // Use innerHTML with escaped text
+             const lowerText = originalText.toLowerCase();
+             const lowerSearchTerm = searchTerm.toLowerCase();
+             let startIndex = 0; let resultHtml = ''; let index = lowerText.indexOf(lowerSearchTerm, startIndex);
+             while (index !== -1) {
+                 resultHtml += escapeHtml(originalText.substring(startIndex, index));
+                 resultHtml += `<span class="log-highlight">${escapeHtml(originalText.substring(index, index + searchTerm.length))}</span>`;
+                 startIndex = index + searchTerm.length; index = lowerText.indexOf(lowerSearchTerm, startIndex);
+             }
+             resultHtml += escapeHtml(originalText.substring(startIndex)); element.innerHTML = resultHtml;
+         }
+        function isScrolledToBottom(element) { /* ... same ... */
+            if (!element) return false; const threshold = 10; /* Increased threshold */ return element.scrollHeight - element.scrollTop - element.clientHeight < threshold; }
+        function scrollToBottom(element) { /* ... same ... */
+            if (!element) return; element.scrollTop = element.scrollHeight; }
+         function updateApiErrorUI(errorData) { /* ... Updated to use hidden class ... */
+             lastKnownApiError = errorData; // Store globally
+             if (!dom.lastErrorCard || !dom.lastErrorMessage || !dom.lastErrorTimestamp) return;
+
+             if (errorData) {
+                 dom.lastErrorMessage.textContent = errorData.message || 'Unknown error';
+                 dom.lastErrorTimestamp.textContent = `Type: ${errorData.type || 'generic'} | Time: ${formatDateTime(errorData.timestamp)}`;
+                 dom.lastErrorCard.classList.remove('hidden'); // Show card
+             } else {
+                 dom.lastErrorCard.classList.add('hidden'); // Hide card
+             }
+             updateStatusIndicator(); // Reflect error in main indicators
+        }
+         function updateStatusIndicator(forceState = null, forceText = null) { /* ... same ... */
+             let status = 'init'; let statusText = 'Initializing...'; const now = DateTime.now();
+             if (forceState) { status = forceState; statusText = forceText || status.charAt(0).toUpperCase() + status.slice(1);
+             } else if (lastKnownApiError) { status = 'error'; statusText = `API Error (${lastKnownApiError.type || 'generic'})`;
+             } else if (lastSuccessfulDataFetch) {
+                 const lastFetchTime = DateTime.fromISO(lastSuccessfulDataFetch);
+                 if (lastFetchTime.isValid) {
+                    const diffSeconds = now.diff(lastFetchTime, 'seconds').seconds;
+                    if (diffSeconds < (CONFIG.POLLING_INTERVAL_MS / 1000) * 2.5) { status = 'live'; statusText = `Live (Updated ${lastFetchTime.toRelative()})`; }
+                    else { status = 'stale'; statusText = `Stale (Last update ${lastFetchTime.toRelative()})`; }
+                 } else { status = 'stale'; statusText = 'Stale (Timestamp issue)'; }
+             } else { status = 'init'; statusText = 'Waiting for first data...'; }
+             // Header Indicator
+             if (dom.statusIndicator) { dom.statusIndicator.textContent = statusText; dom.statusIndicator.className = `status-indicator ${status}`; dom.statusIndicator.title = `Status: ${status} | Last Fetch: ${lastSuccessfulDataFetch || 'N/A'} | Error: ${lastKnownApiError?.message || 'None'}`; }
+             // Footer Indicator
+             if (dom.footerStatus) {
+                  const icons = { init: '⏳', live: '✅', stale: '⚠️', error: '❌', fetching: '⏳' };
+                  const footerClasses = { init: 'stale', live: 'success', stale: 'stale', error: 'error', fetching: 'stale' };
+                  dom.footerStatus.innerHTML = `<span class="status-icon">${icons[status] || ''}</span>${statusText}`;
+                  dom.footerStatus.className = `footer-status ${footerClasses[status] || 'stale'}`;
+             }
+        }
+
+
+        // --- Data Fetching Logic ---
+        async function fetchDashboardData() { /* ... Added isFetchingDashboard flag ... */
+             if (isFetchingDashboard) { console.debug("Dashboard fetch skipped, already in progress."); return; }
+             isFetchingDashboard = true;
+             if (!initialLoadComplete) { updateStatusIndicator('fetching', 'Fetching initial data...'); }
+             else if (!lastKnownApiError) { updateStatusIndicator('fetching', 'Fetching data...'); } // Only show fetching if no error
+
+             console.debug(`[${DateTime.now().toFormat('HH:mm:ss')}] Fetching ${CONFIG.API_DASHBOARD_DATA_URL}`);
+             try {
+                 const response = await fetch(CONFIG.API_DASHBOARD_DATA_URL);
+                 const data = await response.json();
+                 if (!response.ok) { throw new Error(data?.error || data?.detail || `Server returned status ${response.status}`); }
+
+                 if (data.last_api_error && (!lastKnownApiError || data.last_api_error.timestamp !== lastKnownApiError.timestamp)) {
+                     console.warn("API reported an error:", data.last_api_error); updateApiErrorUI(data.last_api_error);
+                 } else if (!data.last_api_error && lastKnownApiError) { updateApiErrorUI(null); } // Clear error if resolved
+
+                 if (!data.latest_stats || Object.keys(data.latest_stats).length === 0) { console.warn("Dashboard data received, but 'latest_stats' is missing or empty."); }
+
+                 updateDashboardUI(data); // Update UI regardless of minor issues
+                 lastSuccessfulDataFetch = data.last_successful_stats_fetch || data.last_successful_queues_fetch || DateTime.now().toISO();
+                 updateStatusIndicator(); // Update status based on fetch outcome
+
+                 handleLogStateFromDashboard(data); // Sync log state
+
+                 if (!initialLoadComplete) {
+                     initialLoadComplete = true; console.info("Initial dashboard data load complete.");
+                     if (currentLogFilename) { fetchLogData(false, true); } // Trigger initial log fetch *after* state is set
+                     else { setLogOverlay('No log file selected or available.', true); dom.logStatusText.textContent = 'No log file selected.'; } // Handle no initial log file
+                     startLogAutoRefreshTimer(); // Start timer now that initial state is known
+                 }
+
+             } catch (error) {
+                 console.error(`Dashboard data fetch failed: ${error.message}`);
+                 updateApiErrorUI({ message: `Dashboard connection error: ${error.message}`, type: "dashboard_fetch", timestamp: DateTime.now().toISO() });
+                 updateStatusIndicator();
+             } finally {
+                 isFetchingDashboard = false;
+             }
+        }
+
+        function handleLogStateFromDashboard(data) { /* ... same ... */
+            if (dom.logAutoRefreshToggle && data.log_auto_refresh_enabled !== undefined) {
+                const changed = logAutoRefreshEnabled !== data.log_auto_refresh_enabled;
+                logAutoRefreshEnabled = data.log_auto_refresh_enabled;
+                dom.logAutoRefreshToggle.checked = logAutoRefreshEnabled;
+                 if(changed) startLogAutoRefreshTimer(); // Restart only if state changed
+            }
+             const previousFilename = currentLogFilename;
+             currentLogFilename = data.current_log_filename || null;
+             canLoadOlderLogs = !!data.log_next_fetch_start_line;
+
+             if (dom.logFilenameDisplay) {
+                 dom.logFilenameDisplay.textContent = currentLogFilename || 'N/A';
+                 dom.logFilenameDisplay.classList.toggle('na', !currentLogFilename);
+             }
+             if (dom.loadOlderLogsBtn) { dom.loadOlderLogsBtn.disabled = !canLoadOlderLogs || isFetchingLogs; }
+             if (dom.refreshLogsBtn) { dom.refreshLogsBtn.disabled = !currentLogFilename || isFetchingLogs; }
+
+             // If filename changed via dashboard data (e.g., log rotated out), fetch new content
+             if (currentLogFilename && currentLogFilename !== previousFilename && initialLoadComplete) {
+                 console.info(`Current log file changed to ${currentLogFilename} via dashboard update. Fetching initial content.`);
+                 fetchLogData(false, true); // Fetch initial content for the *new* file
+             } else if (!currentLogFilename && previousFilename) {
+                 // Current file disappeared
+                 updateLogViewerUI({ lines: [], filename: null }, false); // Clear UI
+             }
+
+            // Display log fetch error reported by backend *only if* it's different from main API error
+            if (data.log_fetch_error && (!lastKnownApiError || !lastKnownApiError.message.includes(data.log_fetch_error.substring(0,30)))) { // Avoid duplicate errors
+                 setLogOverlay(`Log Error: ${data.log_fetch_error}`, true);
+                 if (dom.logStatusText) dom.logStatusText.textContent = `Error: ${data.log_fetch_error}`;
+            } else if (!data.log_fetch_error && dom.logStatusOverlay.classList.contains('visible') && dom.logStatusOverlay.textContent.startsWith('Log Error')) {
+                 // Clear log-specific error overlay if resolved
+                 setLogOverlay('', false);
+            }
+        }
+
+         function startLogAutoRefreshTimer() { /* ... same, uses currentLogFilename check ... */
+             if (fetchLogIntervalId) clearInterval(fetchLogIntervalId);
+             if (logAutoRefreshEnabled && currentLogFilename) { // Also check if a file is selected
+                 fetchLogIntervalId = setInterval(() => fetchLogData(false), CONFIG.LOG_REFRESH_INTERVAL_MS);
+                 console.info(`Log auto-refresh timer started for ${currentLogFilename}.`);
+             } else {
+                 console.info(`Log auto-refresh timer ${currentLogFilename ? 'disabled' : 'inactive (no log file selected)'}.`);
+             }
+        }
+
+         async function fetchLogData(fetchOlder = false, isInitialFetch = false) { /* ... Added button spinner logic ... */
+             if (!currentLogFilename) { console.debug("fetchLogData skipped: No log file selected."); updateLogViewerUI({ lines: [], filename: null }, false); return; }
+             if (isFetchingLogs) { console.debug(`fetchLogData skipped (${fetchOlder ? 'older' : 'latest'}): Already fetching.`); return; }
+
+             isFetchingLogs = true;
+             const button = fetchOlder ? dom.loadOlderLogsBtn : dom.refreshLogsBtn;
+             const spinner = button?.querySelector('.spinner');
+             const btnText = button?.querySelector('.btn-text');
+
+             // Manage Button State
+             if (button) { button.disabled = true; }
+             if (spinner) { spinner.classList.remove('hidden'); }
+             if (btnText && fetchOlder) { btnText.textContent = 'Loading...'; }
+             if (btnText && !fetchOlder && isInitialFetch) { btnText.textContent = 'Refreshing...'; } // Only show spinner on Refresh if initial
+
+             const userAction = fetchOlder || !logAutoRefreshEnabled;
+             if (userAction || isInitialFetch) { setLogOverlay(fetchOlder ? 'Loading older entries...' : 'Fetching latest logs...', true, true); } // Show overlay with spinner
+             if(dom.logStatusText) dom.logStatusText.textContent = fetchOlder ? 'Loading older...' : (isInitialFetch ? 'Fetching...' : 'Refreshing...');
+             dom.loadOlderLogsBtn.disabled = true; // Always disable both during fetch
+             dom.refreshLogsBtn.disabled = true;
+
+             const url = fetchOlder ? CONFIG.API_FETCH_OLDER_LOGS_URL : CONFIG.API_LOG_DATA_URL;
+             console.debug(`[${DateTime.now().toFormat('HH:mm:ss')}] Fetching ${url}${fetchOlder ? ' (older)' : ' (latest)'}`);
+
+             try {
+                 const response = await fetch(url);
+                 const logData = await response.json();
+                 if (!response.ok) { const errorMsg = logData?.error || logData?.detail || `Server returned status ${response.status}`; throw new Error(errorMsg); }
+
+                 if (logData.log_fetch_error) { console.warn(`Log fetch for ${logData.filename} reported error: ${logData.log_fetch_error}`); setLogOverlay(`Error: ${logData.log_fetch_error}`, true); }
+                 else { if (!logData.lines?.length && isInitialFetch) {} else {setLogOverlay('', false)}; } // Hide overlay unless it was initial fetch with no lines
+
+                 updateLogViewerUI(logData, fetchOlder);
+                 currentLogFilename = logData.filename || null;
+                 canLoadOlderLogs = !!logData.next_fetch_start_line;
+
+             } catch (error) {
+                 console.error(`Log data fetch failed (${fetchOlder ? 'older' : 'latest'}): ${error.message}`);
+                 setLogOverlay(`Error fetching logs: ${error.message}`, true);
+                 if(dom.logStatusText) dom.logStatusText.textContent = `Error: ${error.message.substring(0, 100)}`;
+             } finally {
+                 isFetchingLogs = false;
+                 // Reset button state
+                 if (button) { button.disabled = (fetchOlder ? !canLoadOlderLogs : !currentLogFilename); } // Re-enable based on state
+                 if (spinner) { spinner.classList.add('hidden'); }
+                 if (btnText && fetchOlder) { btnText.textContent = 'Load Older'; }
+                 if (btnText && !fetchOlder && isInitialFetch) { btnText.textContent = 'Refresh Now'; }
+                  // Reset other button too
+                  dom.loadOlderLogsBtn.disabled = !canLoadOlderLogs || isFetchingLogs;
+                  dom.refreshLogsBtn.disabled = !currentLogFilename || isFetchingLogs;
+
+                 if(dom.logStatusText && (dom.logStatusText.textContent.startsWith('Loading') || dom.logStatusText.textContent.startsWith('Refreshing') || dom.logStatusText.textContent.startsWith('Fetching'))) {
+                    dom.logStatusText.textContent = `Last updated: ${DateTime.now().toFormat('HH:mm:ss')}`;
+                 }
+                 // Ensure overlay is hidden if fetch ended successfully (unless it should stay due to no lines/filter match)
+                 if (!dom.logStatusOverlay.textContent.includes('Error') && !dom.logStatusOverlay.textContent.includes('empty') && !dom.logStatusOverlay.textContent.includes('match')) {
+                      setLogOverlay('', false);
+                 }
+             }
+        }
+
+
+        // --- Event Listeners Setup ---
+         function setupEventListeners() { /* ... same, ensure button IDs match ... */
+             if (dom.refreshLogsBtn) { dom.refreshLogsBtn.addEventListener('click', () => { console.log("Manual log refresh triggered."); fetchLogData(false); }); }
+             if (dom.loadOlderLogsBtn) { dom.loadOlderLogsBtn.addEventListener('click', () => { console.log("Load older logs triggered."); fetchLogData(true); }); }
+             if (dom.logAutoRefreshToggle) {
+                 dom.logAutoRefreshToggle.checked = logAutoRefreshEnabled; // Set initial state from config
+                 dom.logAutoRefreshToggle.addEventListener('change', async (e) => {
+                     const enabled = e.target.checked; console.log(`Toggling log auto-refresh to: ${enabled}`);
+                     try {
+                         const response = await fetch(CONFIG.API_TOGGLE_LOG_REFRESH_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled: enabled}) });
+                         if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Server error ${response.status}`); }
+                         const result = await response.json();
+                         if (result.success) { logAutoRefreshEnabled = result.enabled; dom.logAutoRefreshToggle.checked = logAutoRefreshEnabled; startLogAutoRefreshTimer(); console.info(`Log auto-refresh successfully set to: ${logAutoRefreshEnabled}`); }
+                         else { throw new Error("Toggle command rejected by server."); }
+                     } catch (err) { console.error("Failed to toggle log auto-refresh:", err); e.target.checked = !enabled; if(dom.logStatusText) dom.logStatusText.textContent = "Error toggling refresh."; }
+                 });
+             }
+             if (dom.logSearchInput) {
+                 dom.logSearchInput.addEventListener('input', () => { clearTimeout(logSearchDebounceTimeout); logSearchDebounceTimeout = setTimeout(() => { logSearchTerm = dom.logSearchInput.value.trim(); console.debug(`Log search term changed: "${logSearchTerm}"`); applyLogFilterAndSearch(); }, 350); }); // Slightly longer debounce
+             }
+             if (dom.logFilterLevel) { dom.logFilterLevel.addEventListener('change', () => { logFilterLevel = dom.logFilterLevel.value; console.debug(`Log filter level changed: "${logFilterLevel}"`); applyLogFilterAndSearch(); }); }
+             console.debug("Event listeners set up.");
+        }
+
+    </script>
+
+</body>
+</html>
