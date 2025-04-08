@@ -1,4 +1,4 @@
-name: 🚀 Build and Push Docker Image with Supervisor Runtime
+name: 🚀 Build and Push Docker Image with Supervisor Runtime + Streamlit Control Center
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: 🧱 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 🧾 Create Dockerfile dynamically
+      - name: 📋 Create Dockerfile dynamically
         run: |
           cat <<'EOF' > Dockerfile
           FROM ubuntu:22.04
@@ -46,7 +46,9 @@ jobs:
                 requests \
                 schedule \
                 flask \
-                flask_cors
+                flask_cors \
+                streamlit \
+                paramiko
 
           RUN useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
@@ -85,6 +87,15 @@ jobs:
           startsecs=3
           stderr_logfile=/var/log/supervisor/webdash.err.log
           stdout_logfile=/var/log/supervisor/webdash.out.log
+
+          [program:controlcenter]
+          command=streamlit run /home/replika/app/streamlit-control-center-v1.py --server.port=8555 --server.enableCORS=false
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
+          startsecs=5
+          stderr_logfile=/var/log/supervisor/streamlit.err.log
+          stdout_logfile=/var/log/supervisor/streamlit.out.log
           EOF
 
       - name: 🐳 Docker Login
@@ -97,27 +108,34 @@ jobs:
         run: |
           docker build -t $IMAGE_NAME:$VERSION .
 
-      - name: 📤 Push Docker Image
+      - name: 📄 Push Docker Image
         run: |
           docker push $IMAGE_NAME:$VERSION
 
       - name: 🚀 Deploy & Test Ports
         run: |
-          docker run -d --name replika_test_container -p 8333:8333 -p 8777:8777 $IMAGE_NAME:$VERSION
-          echo '⏳ Aguardando 15s para inicialização dos serviços...'
-          sleep 15
+          docker run -d --name replika_test_container -p 8333:8333 -p 8777:8777 -p 8555:8555 $IMAGE_NAME:$VERSION
+          echo '⏳ Aguardando 20s para inicialização dos serviços...'
+          sleep 20
           echo '🔍 Testando se as portas estão respondendo...'
           nc -zv localhost 8333 || echo '⚠️ Porta 8333 não está respondendo.'
           nc -zv localhost 8777 || echo '⚠️ Porta 8777 não está respondendo.'
+          nc -zv localhost 8555 || echo '⚠️ Porta 8555 (Streamlit) não está respondendo.'
           echo '✅ Teste de portas finalizado.'
+
           echo '📜 Últimos logs do supervisord:'
           docker exec replika_test_container tail -n 50 /var/log/supervisor/supervisord.log || echo '⚠️ Não foi possível obter logs.'
-          echo '📜 Últimos logs do broker:'
+
+          echo '📜 Logs do broker:'
           docker exec replika_test_container tail -n 50 /var/log/supervisor/broker.out.log || echo '⚠️ Sem logs.'
-          echo '📜 Últimos logs do dashboard:'
+
+          echo '📜 Logs do dashboard:'
           docker exec replika_test_container tail -n 50 /var/log/supervisor/webdash.out.log || echo '⚠️ Sem logs.'
 
-      # - name: 🏷️ Optional: Create and push tag
+          echo '📜 Logs do Streamlit:'
+          docker exec replika_test_container tail -n 50 /var/log/supervisor/streamlit.out.log || echo '⚠️ Sem logs.'
+
+      # - name: 🍿 Optional: Create and push tag
       #   run: |
       #     git config --global user.name "Elias Andrade - Replika AI"
       #     git config --global user.email "chaos4455@users.noreply.github.com"
