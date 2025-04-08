@@ -16,11 +16,14 @@ jobs:
       - name: 📦 Checkout do Código
         uses: actions/checkout@v3
 
-      - name: 📁 Criação do Dockerfile e Supervisord Dinâmicos
+      - name: 🛠️ Preparar Estrutura para Build
         run: |
-          mkdir -p /home/replika/app
-          cp -r * /home/replika/app
+          echo "📁 Preparando diretório temporário para build..."
+          mkdir -p dockerbuild/app
+          cp -r * dockerbuild/app
 
+      - name: 🔧 Gerar Dockerfile Dinamicamente
+        run: |
           echo "🔧 Gerando Dockerfile dinamicamente..."
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
@@ -28,7 +31,7 @@ jobs:
           RUN apt-get update && \
               apt-get upgrade -y && \
               apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor && \
-              pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
+              pip3 install --no-cache-dir -r /app/requirements.txt
 
           # Configura SSH
           RUN useradd -m -s /bin/bash admin && \
@@ -37,13 +40,15 @@ jobs:
               echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
               mkdir -p /var/run/sshd
 
-          # Copia configuração do Supervisor
           COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+          COPY dockerbuild/app /app
 
-          WORKDIR /home/replika/app
+          WORKDIR /app
           CMD ["/usr/bin/supervisord"]
           EOF
 
+      - name: 🧾 Gerar supervisord.conf Dinamicamente
+        run: |
           echo "🧾 Gerando supervisord.conf dinamicamente..."
           cat <<EOF > supervisord.conf
           [supervisord]
@@ -57,8 +62,8 @@ jobs:
           stderr_logfile=/var/log/supervisor/sshd.err.log
 
           [program:streamlit-dashboard]
-          command=python3 /home/replika/app/streamlit-control-center-v1.py
-          directory=/home/replika/app
+          command=python3 /app/streamlit-control-center-v1.py
+          directory=/app
           autostart=true
           autorestart=true
           stdout_logfile=/var/log/supervisor/streamlit.log
@@ -73,24 +78,14 @@ jobs:
 
       - name: 🚀 Subir Container
         run: |
-          docker run -d --name vectorial-profiler \
-            -p 8222:22 \
-            -p 8555:8555 \
-            -p 8881:8881 \
-            $DOCKER_IMAGE_NAME
+          echo "🚀 Iniciando container com portas expostas (8555, 8881, 8222)..."
+          docker run -d --name vectorial-profiler -p 8555:8555 -p 8881:8881 -p 8222:22 $DOCKER_IMAGE_NAME
           sleep 15
 
       - name: 🧠 Verificar Serviços do Supervisor
         run: |
-          echo "🔍 Checando status dos serviços via Supervisor:"
+          echo "🔍 Checando status geral dos serviços:"
           docker exec vectorial-profiler supervisorctl status || echo "❌ Supervisor falhou ao listar status."
-
-      - name: 🛰️ Verificar se SSH está ativo
-        run: |
-          echo "🔒 Verificando SSH..."
-          docker exec vectorial-profiler ps aux | grep sshd || echo "❌ sshd não encontrado"
-          echo "⚙️ Verificando se porta 22 está ativa internamente:"
-          docker exec vectorial-profiler netstat -tuln | grep ':22' || echo "❌ Porta 22 não está escutando"
 
       - name: 🔎 Verificar se Streamlit está de pé (porta 8555)
         run: |
@@ -101,20 +96,32 @@ jobs:
               echo "✅ Streamlit subiu corretamente na porta 8555"
               break
             elif [ "$i" -eq 6 ]; then
-              echo "❌ Streamlit não respondeu corretamente após múltiplas tentativas"
+              echo "❌ Erro: Streamlit não subiu corretamente na porta 8555 após múltiplas tentativas"
+              echo "Coletando logs do container..."
               docker logs vectorial-profiler
               docker exec vectorial-profiler supervisorctl status
+              docker exec vectorial-profiler cat /var/log/supervisor/supervisord.log || true
               exit 1
             fi
           done
 
-      - name: 📄 Processos Ativos no Container
-        run: docker exec vectorial-profiler ps aux
+      - name: 📄 Listar Processos Ativos no Container
+        run: |
+          echo "📦 Processos ativos dentro do container:"
+          docker exec vectorial-profiler ps aux
 
       - name: 🪵 Coletar Logs do Supervisor
         run: |
-          echo "📑 Logs do Supervisor:"
-          docker exec vectorial-profiler cat /var/log/supervisor/supervisord.log || echo "❌ Logs indisponíveis"
+          echo "📑 Logs do Supervisor dentro do container:"
+          docker exec vectorial-profiler cat /var/log/supervisor/supervisord.log || echo "❌ Falha ao coletar logs do Supervisor"
+
+      - name: 🔐 Verificar Conexão SSH no Container
+        run: |
+          echo "🔐 Testando conexão SSH local com admin:admin..."
+          docker exec vectorial-profiler apt-get install -y openssh-client
+          sleep 2
+          docker exec vectorial-profiler bash -c "echo 'StrictHostKeyChecking no' >> /etc/ssh/ssh_config"
+          docker exec vectorial-profiler sshpass -p admin ssh -p 22 admin@localhost 'echo "✅ Conexão SSH local bem-sucedida"' || echo "❌ Falha na conexão SSH local"
 
       - name: 🧼 Cleanup (opcional)
         if: always()
