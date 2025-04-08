@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  message-broker:
+    image: chaos4455/message-broker-replika:latest
+    container_name: message-broker-replika-compose
+    pull_policy: always
+    ports:
+      - "8222:22"
+      - "8777:8777"
+      - "8333:8333"
+      - "8555:8555"
+    restart: unless-stopped
