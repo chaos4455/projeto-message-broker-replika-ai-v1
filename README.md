@@ -192,26 +192,23 @@ A maneira mais simples e recomendada por mim para você experimentar o Replika �
 
 2.  **Execute o Container:**
     ```bash
-    docker run -d --name replika_broker \
-      -p 8777:8777 \
-      -p 8333:8333 \
-      chaos4455/message-broker-replika:latest
-    ```
-    *   `-d`: Roda o container em background (detached).
-    *   `--name replika_broker`: Dá um nome fácil de lembrar para o container.
-    *   `-p 8777:8777`: Mapeia a porta 8777 da sua máquina para a porta 8777 do container (onde roda a API FastAPI).
-    *   `-p 8333:8333`: Mapeia a porta 8333 da sua máquina para a porta 8333 do container (onde roda o Dashboard Flask).
-
-3.  **Acesse os Serviços:**
-    *   **API Principal (FastAPI):** `http://localhost:8777`
-    *   **Documentação Swagger UI:** `http://localhost:8777/docs`
-    *   **Documentação ReDoc:** `http://localhost:8777/redoc`
-    *   **Endpoint GraphQL:** `http://localhost:8777/graphql` (Use um cliente GraphQL como Apollo Sandbox ou Postman)
-    *   **Dashboard Web (Flask):** `http://localhost:8333`
-
-4.  **Credenciais Padrão (Atenção!):**
-    *   **Usuário:** `admin`
-    *   **Senha:** `admin`
+📌 Explicação dos parâmetros:
+-d: Executa em modo detached (background).
+--name replika_broker: Nome amigável para o container.
+-p 8777:8777: Expõe a API principal (FastAPI).
+-p 8333:8333: Expõe o Dashboard web (Flask).
+-p 8555:8555: Expõe o WebApp de Gerenciamento (Streamlit + Paramiko).
+🌐 3. Acesse os Serviços
+Serviço	URL de Acesso	Porta
+⚡ API Principal (FastAPI)	http://localhost:8777	8777
+📄 Swagger UI	http://localhost:8777/docs	
+📘 ReDoc	http://localhost:8777/redoc	
+🔎 GraphQL Endpoint	http://localhost:8777/graphql	
+📊 Dashboard Flask	http://localhost:8333	8333
+🖥️ WebApp Gerencial SSH	http://localhost:8555	8555
+🔐 4. Credenciais Padrão (Somente para Testes Locais)
+Usuário: admin
+Senha:   admin
 
     ⚠️ **ALERTA DE SEGURANÇA CRÍTICO!** ⚠️
     Estas credenciais (`admin`/`admin`) são **EXTREMAMENTE INSEGURAS** e servem **APENAS** para um primeiro teste rápido local. **JAMAIS, EM HIPÓTESE ALGUMA**, utilize estas credenciais em qualquer ambiente que não seja o seu próprio computador para testes iniciais. Em ambientes de desenvolvimento compartilhado, staging ou produção, é **OBRIGATÓRIO** configurar mecanismos de autenticação seguros e gerenciar segredos adequadamente (via variáveis de ambiente, secret managers, etc.). Eu abordo isso mais adiante nas considerações de segurança.
