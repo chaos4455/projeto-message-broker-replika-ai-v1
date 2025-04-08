@@ -1,0 +1,53 @@
+name: 🐳 Build Docker Image from Python Script
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-docker:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: 🔐 Checkout código do repositório privado
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📝 Criar Dockerfile dinamicamente
+        run: |
+          cat <<EOF > Dockerfile
+          FROM python:3.11-slim
+
+          # Instala dependências do sistema
+          RUN apt-get update && apt-get install -y gcc libpq-dev
+
+          # Instala libs Python necessárias
+          RUN pip install --no-cache-dir tortoise-orm asyncpg
+
+          # Copia o script
+          COPY message-broker-v3-clean.py /app/message-broker-v3-clean.py
+
+          # Define diretório de trabalho
+          WORKDIR /app
+
+          # Roda o script ao iniciar o container
+          CMD ["python", "message-broker-v3-clean.py"]
+          EOF
+
+      - name: 🛠️ Buildar imagem Docker
+        run: |
+          docker build -t message-broker-v3:latest .
+
+      # (Opcional) Push para Docker Hub ou outro registry
+      # - name: 🔐 Login no Docker Hub
+      #   uses: docker/login-action@v2
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # - name: 📤 Push da imagem
+      #   run: |
+      #     docker tag message-broker-v3:latest ${{ secrets.DOCKER_USERNAME }}/message-broker-v3:latest
+      #     docker push ${{ secrets.DOCKER_USERNAME }}/message-broker-v3:latest
