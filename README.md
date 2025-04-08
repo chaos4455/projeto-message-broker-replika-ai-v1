@@ -47,6 +47,7 @@ Este projeto é um reflexo da minha visão sobre como construir software resilie
 
 ---
 
+
 ## 📖 Replika Message Broker: Uma Visão Geral
 
 O Replika é, em essência, um **message broker open-source** projetado para ser um intermediário confiável na comunicação assíncrona. Eu o construí utilizando o que há de mais moderno em Python assíncrono, como **FastAPI** para a API RESTful/GraphQL e **Tortoise ORM** para persistência (inicialmente com **Aiosqlite**, mas extensível).
@@ -93,6 +94,67 @@ A filosofia por trás do Replika é **simplicidade e performance**. Ele não ten
 
 
 <img width="1087" alt="chrome_OfCQUHyUY3" src="https://github.com/user-attachments/assets/3063ea80-956d-4e66-9d4d-de9b7278152c" />
+
+
+## 📘 Dev Diary – Maringá | `08/04/2025 – 17:37`
+
+[![Streamlit WebApp](https://img.shields.io/badge/WebApp-Streamlit-DD4B39?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Dockerized](https://img.shields.io/badge/Container-Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![SSH Enabled](https://img.shields.io/badge/SSH-Paramiko-3776AB?logo=python&logoColor=white)](https://www.paramiko.org/)
+[![Status](https://img.shields.io/badge/Status-🟢%20Online-success?style=flat-square)]
+[![Porta](https://img.shields.io/badge/Porta-8555-informational?style=flat-square&logo=streamlit)]
+
+---
+
+### 🆕 **Atualização de Serviço no Container**
+
+🚀 Foi adicionado um novo **Web App** com [**Streamlit**](https://streamlit.io/) dentro do container, acessível pela porta `:8555`.
+
+🔐 O app integra **[Paramiko](https://www.paramiko.org/)** para realizar **conexões SSH** diretamente pela interface web. Agora é possível **gerenciar o ambiente do container remotamente** sem sair do navegador! 🌐💻
+
+---
+
+### ⚙️ Tecnologias Empregadas
+
+| 💼 Componente     | 🔧 Tecnologia                |
+|------------------|-----------------------------|
+| Interface Web    | `Streamlit` 🌈              |
+| Conexão SSH      | `Paramiko` (Python) 🔐       |
+| Containerização  | `Docker` 🐳                  |
+| Backend Scripts  | Python + Libs personalizadas |
+
+---
+
+### ✨ Funcionalidades Atuais
+
+- ✅ Execução de comandos via interface web
+- 📊 Monitoramento de variáveis e processos do sistema
+- 🧠 Modularização para extensões futuras (como logs, tarefas agendadas)
+- 🔁 Resposta em tempo real via WebSockets (em construção)
+
+---
+
+> 💡 **Destaque**: app exposto na **porta 8555**, ideal para ambientes isolados, VMs, cloud ou automações internas de DevOps.
+
+---
+
+### 📁 Commit associado  
+`🔗 add-streamlit-ssh-webapp`
+
+---
+
+### 📍 Local e Horário  
+🗺️ **Maringá - PR**  
+🕐 **17:37 - BRT**
+
+---
+
+### 👨‍💻 Autor  
+🧑‍💻 Desenvolvido por: **[@EliasAndrade](https://github.com/EliasAndrade)**  
+🚀 _"Automação é liberdade para criar."_
+
+---
+
 
 
 
