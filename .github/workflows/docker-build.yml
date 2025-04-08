@@ -1,66 +1,68 @@
-name: 🔧 Build & Release Docker Image
+name: 🚀 Build & Deploy Docker Image
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 env:
   IMAGE_NAME: chaos4455/message-broker-replika
   VERSION_PREFIX: RC1-beta-v
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🛒 Checkout código
-        uses: actions/checkout@v3
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v4
 
-      - name: 🧠 Define versão atual com base nas tags
+      - name: 🧠 Define nova versão
         id: version
         run: |
+          PREFIX="RC1-beta-v"
           git fetch --tags
-          LAST_TAG=$(git tag --sort=-v:refname | grep "^$VERSION_PREFIX" | head -n 1 || echo "${VERSION_PREFIX}0000")
+          LAST_TAG=$(git tag --sort=-v:refname | grep "^$PREFIX" | head -n 1 || echo "${PREFIX}0000")
           NUMBER=$(echo $LAST_TAG | grep -oP '\d+$')
           NEXT=$(printf "%04d" $((10#$NUMBER + 1)))
-          echo "version=${VERSION_PREFIX}${NEXT}" >> $GITHUB_OUTPUT
+          echo "version=${PREFIX}${NEXT}" >> $GITHUB_OUTPUT
 
-      - name: ✏️ Gera Dockerfile dinamicamente
+      - name: 🛠️ Gera Dockerfile dinamicamente
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
 
-          ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update && apt-get upgrade -y && apt-get install -y \\
+              python3 python3-pip gcc libpq-dev build-essential \\
+              openssh-server sudo ufw nano vim htop iftop net-tools \\
+              curl wget unzip iputils-ping libpam0g-dev libpam-modules \\
+              && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-          RUN apt-get update && apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip gcc libpq-dev build-essential \
-              openssh-server sudo ufw nano vim htop iftop net-tools curl wget unzip iputils-ping \
-              libpam0g-dev libpam-modules && \
-              apt-get clean && rm -rf /var/lib/apt/lists/*
+          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
-              echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-              mkdir /var/run/sshd
+          RUN mkdir /var/run/sshd
 
-          RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+          RUN sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
           WORKDIR /app
-          COPY . /app
+          COPY requirements.txt .
+          COPY message-broker-v3-clean.py .
+          COPY webdash3-clean.py .
+          COPY geramensagem-v3-massive-loop.py .
+          COPY coleta-mensagem-v3-batch-lote.py .
 
           RUN pip3 install --no-cache-dir -r requirements.txt
 
           EXPOSE 22 8000 8080 8333 8777
 
-          CMD service ssh start && \
-              (python3 message-broker-v3-clean.py & \
-               sleep 5 && python3 webdash3-clean.py & \
-               sleep 5 && python3 geramensagem-v3-massive-loop.py & \
-               sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \
-               tail -f /dev/null)
+          CMD service ssh start && \\
+              (python3 message-broker-v3-clean.py &) && \\
+              sleep 5 && (python3 webdash3-clean.py &) && \\
+              sleep 5 && (python3 geramensagem-v3-massive-loop.py &) && \\
+              sleep 5 && (python3 coleta-mensagem-v3-batch-lote.py &) && \\
+              tail -f /dev/null
           EOF
 
       - name: 🐳 Login no DockerHub
@@ -69,17 +71,19 @@ jobs:
           username: chaos4455
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 🛠️ Build da imagem Docker
+      - name: 📦 Build da imagem
         run: |
           docker build -t $IMAGE_NAME:${{ steps.version.outputs.version }} .
 
-      - name: 📤 Push da imagem pro DockerHub
+      - name: ☁️ Push da imagem
         run: |
           docker push $IMAGE_NAME:${{ steps.version.outputs.version }}
 
-      - name: 🏷️ Cria tag de release no GitHub
+      - name: 🏷️ Cria e envia tag Git
+        env:
+          GITHUB_TOKEN: ${{ secrets.MASTERTOKEN }}
         run: |
           git config --global user.name "Elias Andrade - Replika AI"
           git config --global user.email "chaos4455@users.noreply.github.com"
           git tag ${{ steps.version.outputs.version }}
-          git push https://chaos4455:${{ secrets.MASTERTOKEN }}@github.com/chaos4455/projeto-message-broker-replika-ai-v1.git ${{ steps.version.outputs.version }}
+          git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/${{ github.repository }} --tags
