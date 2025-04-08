@@ -15,48 +15,52 @@ jobs:
       EXTERNAL_SSH_PORT: 8222
 
     steps:
-      - name: 📅 Clonando Repositório
+      - name: 📥 Clonando Repositório
         uses: actions/checkout@v3
 
-      - name: 🔄 Garantindo Pull de Últimos Dados
-        run: git pull origin main || echo "⚠️ Aviso: Falha ao executar git pull."
-
-      - name: 📁 Preparando diretório temporário para build
+      - name: 🔄 Verificando atualizações remotas
         run: |
+          echo "🔍 Verificando atualizações no branch 'main'..."
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "📥 Pulling últimas mudanças do repositório..."
+            git pull origin main
+          else
+            echo "✅ Já está atualizado com o branch main."
+          fi
+
+      - name: 🗂️ Preparando diretório de build
+        run: |
+          echo "🧹 Limpando diretórios anteriores..."
           rm -rf dockerbuild
           mkdir -p dockerbuild/app
           shopt -s extglob
           cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
 
-      - name: 📄 Validando arquivos essenciais
+      - name: 📜 Validando arquivos essenciais
         run: |
           ls -lah dockerbuild/app
           if [ ! -f dockerbuild/app/requirements.txt ]; then
-            echo "❌ Arquivo requirements.txt ausente!"
+            echo "❌ Arquivo requirements.txt não encontrado!"
             exit 1
           fi
 
-      - name: 📝 Gerando Dockerfile Dinamicamente
+      - name: 🧱 Criando Dockerfile dinâmico
         run: |
           cat <<EOF > dockerbuild/Dockerfile
           FROM ubuntu:22.04
 
-          ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update && apt-get upgrade -y && \
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat
 
-          RUN apt-get update && apt-get install -y \
-              python3 python3-pip \
-              curl git net-tools iputils-ping \
-              nano openssh-server supervisor sshpass netcat && \
-              apt-get clean
-
-          RUN useradd -ms /bin/bash replika && \
-              echo 'admin:admin' | chpasswd && \
+          RUN useradd -m -s /bin/bash admin && \
+              echo "admin:admin" | chpasswd && \
               echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
               echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
               mkdir -p /var/run/sshd
 
-          COPY app /home/replika/app
           WORKDIR /home/replika/app
+          COPY app /home/replika/app
           RUN pip3 install --no-cache-dir -r requirements.txt
 
           COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -64,7 +68,7 @@ jobs:
           CMD ["/usr/bin/supervisord"]
           EOF
 
-      - name: ⚖️ Gerando supervisord.conf Dinamicamente
+      - name: ⚙️ Gerando supervisord.conf com lógica refinada
         run: |
           cat <<EOF > dockerbuild/supervisord.conf
           [supervisord]
@@ -74,33 +78,49 @@ jobs:
           command=/usr/sbin/sshd -D
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/sshd.log
-          stderr_logfile=/var/log/supervisor/sshd.err.log
 
-          [program:init-broker]
-          command=/bin/bash -c "python3 message-broker-v3-clean.py && sleep 10 && pkill -f message-broker-v3-clean.py && sleep 2 && python3 dbfixv1.py && sleep 10 && python3 dbfixv2.py && sleep 10 && python3 message-broker-v3-clean.py && sleep 120 && python3 webdash3-clean.py && sleep 10 && python3 geramensagem-v3-massive-loop.py && sleep 10 && python3 coleta-mensagem-v3-batch-lote.py"
+          [program:broker-init]
+          command=/bin/bash -c "python3 message-broker-v3-clean.py && sleep 10"
           directory=/home/replika/app
           autostart=true
           autorestart=false
           startsecs=0
-          stdout_logfile=/var/log/supervisor/init-broker.log
-          stderr_logfile=/var/log/supervisor/init-broker.err.log
 
-          [program:geramensagem]
-          command=python3 /home/replika/app/geramensagem-v3-massive-loop.py
+          [program:dbfixv1]
+          command=/bin/bash -c "sleep 15 && python3 dbfixv1.py"
+          directory=/home/replika/app
+          autostart=true
+          autorestart=false
+
+          [program:dbfixv2]
+          command=/bin/bash -c "sleep 25 && python3 dbfixv2.py"
+          directory=/home/replika/app
+          autostart=true
+          autorestart=false
+
+          [program:broker-final]
+          command=/bin/bash -c "sleep 35 && python3 message-broker-v3-clean.py"
           directory=/home/replika/app
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/geramensagem.log
-          stderr_logfile=/var/log/supervisor/geramensagem.err.log
 
-          [program:coletamensagem]
-          command=python3 /home/replika/app/coleta-mensagem-v3-batch-lote.py
+          [program:webdash]
+          command=/bin/bash -c "sleep 55 && python3 webdash3-clean.py"
           directory=/home/replika/app
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/coletamensagem.log
-          stderr_logfile=/var/log/supervisor/coletamensagem.err.log
+
+          [program:gerador]
+          command=/bin/bash -c "sleep 65 && python3 geramensagem-v3-massive-loop.py"
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
+
+          [program:coletor]
+          command=/bin/bash -c "sleep 75 && python3 coleta-mensagem-v3-batch-lote.py"
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
           EOF
 
       - name: 🔐 Login no Docker Hub
@@ -109,7 +129,7 @@ jobs:
       - name: 🛠️ Build da Imagem Docker
         run: docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
 
-      - name: ⬆️ Push para o Docker Hub
+      - name: ⏫ Push para Docker Hub
         run: docker push $DOCKER_IMAGE_NAME
 
       - name: 🚀 Subindo Container
@@ -124,28 +144,27 @@ jobs:
             $DOCKER_IMAGE_NAME
           sleep 30
 
-      - name: 🫝 Verificando status do Supervisor
-        run: docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "❌ Falha ao coletar status."
+      - name: 📡 Verificar status dos serviços
+        run: docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "❌ Erro ao verificar status do supervisor."
 
-      - name: 📡 Testar portas expostas
+      - name: 📶 Verificar portas expostas
         run: |
-          for PORT in 8555 8881 8777 8333; do
-            echo 🔎 Testando porta $PORT...
-            nc -zv 127.0.0.1 $PORT && echo "✅ Porta $PORT OK" || echo "❌ Falha na porta $PORT"
+          for porta in 8555 8881 8777 8333; do
+            echo "🔍 Testando porta $porta..."
+            nc -zv 127.0.0.1 $porta && echo "✅ Porta $porta OK!" || echo "❌ Porta $porta falhou."
           done
 
-      - name: 🔐 Testar SSH
+      - name: 🔐 Testar Acesso SSH
         run: |
-          echo "⏳ Aguardando SSH..."
-          sleep 10
-          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ SSH OK"' || echo "❌ SSH falhou"
+          echo "🔐 Testando SSH..."
+          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ SSH OK!"' || echo "❌ SSH Falhou"
 
-      - name: 📂 Logs do Supervisor
-        run: docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs."
+      - name: 📜 Logs do Supervisor
+        run: docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Logs indisponíveis"
 
-      - name: 📊 Processos ativos no container
+      - name: 📋 Processos Ativos
         run: docker exec $DOCKER_CONTAINER_NAME ps aux
 
-      - name: 🧹 Cleanup (opcional)
+      - name: 🧹 Cleanup Final (opcional)
         if: always()
         run: docker rm -f $DOCKER_CONTAINER_NAME || true
