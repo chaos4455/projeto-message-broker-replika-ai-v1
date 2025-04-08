@@ -19,7 +19,7 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: 📝 Gerar Dockerfile dinamicamente
+    - name: 📝 Criar Dockerfile dinamicamente
       run: |
         cat <<'EOF' > Dockerfile
         FROM ubuntu:22.04
@@ -33,19 +33,20 @@ jobs:
             libpam0g-dev libpam-modules && \
             apt-get clean
 
-        # --- Configura usuário admin com senha admin ---
-        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+        # --- Cria usuário admin com permissão sudo ---
+        RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
+            echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-        # --- Ativa SSH e configura diretório necessário ---
+        # --- Ativa o SSH ---
         RUN mkdir /var/run/sshd
 
-        # --- Segurança básica (hardening) ---
+        # --- Hardening SSH ---
         RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
             sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-        # --- UFW: libera as portas desejadas ---
+        # --- Ativa UFW e libera portas ---
         RUN ufw allow 22 && \
             ufw allow 8000 && \
             ufw allow 8080 && \
@@ -54,27 +55,27 @@ jobs:
             ufw allow OpenSSH && \
             ufw --force enable
 
-        # --- Define diretório do app ---
+        # --- Define diretório de trabalho ---
         WORKDIR /app
 
-        # --- Copia arquivos do repositório ---
+        # --- Copia os arquivos do projeto ---
         COPY requirements.txt .
         COPY message-broker-v3-clean.py .
 
-        # --- Instala pacotes Python necessários ---
+        # --- Instala dependências Python ---
         RUN pip3 install --no-cache-dir -r requirements.txt
 
-        # --- Expõe as portas do serviço e SSH ---
+        # --- Expõe as portas ---
         EXPOSE 22 8000 8080 8333 8777
 
-        # --- Comando principal ---
+        # --- Inicia SSH + App ---
         CMD service ssh start && python3 message-broker-v3-clean.py
         EOF
 
-    - name: 🐳 Build da imagem Docker
+    - name: 🏗️ Build da imagem Docker
       run: |
         docker build -t chaos4455/message-broker-v3:latest .
 
-    - name: 🚀 Push da imagem pro Docker Hub
+    - name: 🚀 Push para o Docker Hub
       run: |
         docker push chaos4455/message-broker-v3:latest
