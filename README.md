@@ -1,4 +1,4 @@
-# 🚀 Replika Message Broker - Por Elias Andrade 🚀
+# 🚀 Replika Message Broker - Replika AI Solutions 🚀
 
 [![Status do Workflow (main)](https://img.shields.io/github/actions/workflow/status/chaos4455/message-broker-replika/docker-build.yml?branch=main&style=for-the-badge&logo=githubactions&label=CI%2FCD%20Pipeline)](https://github.com/chaos4455/message-broker-replika/actions/workflows/docker-build.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/chaos4455/message-broker-replika?style=for-the-badge&logo=docker&label=Pulls%20DockerHub)](https://hub.docker.com/r/chaos4455/message-broker-replika)
