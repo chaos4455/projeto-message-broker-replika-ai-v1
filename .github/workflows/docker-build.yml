@@ -1,77 +1,67 @@
-name: 🔄 Build, Run & Check Container
+name: 🔄 Build, Push & Run Multi-Script Container
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  build-run-check:
+  build-and-push:
+    name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
+
     steps:
-      - name: 📥 Checkout do código
-        uses: actions/checkout@v4
+      - name: ⏬ Checkout do repositório
+        uses: actions/checkout@v3
 
-      - name: 🔐 Login no Docker Hub
-        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u chaos4455 --password-stdin
-
-      - name: 📝 Criar Dockerfile dinamicamente
+      - name: 🧠 Gerar Dockerfile dinâmico
         run: |
-          cat <<'EOF' > Dockerfile
+          cat <<EOF > Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && apt-get install -y \
-              python3 python3-pip \
-              gcc libpq-dev build-essential \
-              openssh-server sudo \
-              nano vim htop iftop net-tools curl wget unzip iputils-ping \
-              libpam0g-dev libpam-modules && \
-              apt-get clean
+          ENV DEBIAN_FRONTEND=noninteractive
 
-          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && \
-              echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+          RUN apt-get update && apt-get install -y \\
+              python3 python3-pip \\
+              gcc libpq-dev build-essential \\
+              openssh-server sudo ufw \\
+              nano vim htop iftop net-tools curl wget unzip iputils-ping \\
+              libpam0g-dev libpam-modules \\
+              && apt-get clean
 
+          RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
           RUN mkdir /var/run/sshd
 
-          RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
-              sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
-
-          WORKDIR /app
-          COPY requirements.txt .
-          COPY message-broker-v3-clean.py .
-          RUN pip3 install --no-cache-dir -r requirements.txt
+          RUN sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \\
+              sed -i 's/^#\\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
           EXPOSE 22 8000 8080 8333 8777
 
-          CMD service ssh start && python3 message-broker-v3-clean.py
+          WORKDIR /app
+          COPY . /app
+
+          RUN pip3 install --no-cache-dir -r requirements.txt || true
+
+          CMD service ssh start && \\
+              python3 message-broker-v3-clean.py & \\
+              sleep 5 && \\
+              python3 webdash3-clean.py & \\
+              sleep 5 && \\
+              python3 geramensagem-v3-massive-loop.py & \\
+              sleep 5 && \\
+              python3 coleta-mensagem-v3-batch-lote.py && \\
+              tail -f /dev/null
           EOF
 
-      - name: 🏗️ Build da imagem Docker
+      - name: 🔐 Login no Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: chaos4455
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🐋 Build da imagem Docker
         run: docker build -t chaos4455/message-broker-v3:latest .
 
-      - name: 🐳 Instalar Docker (caso necessário)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-
-      - name: 🚀 Rodar o container
-        run: |
-          docker run -d -p 8777:8777 --name broker-container chaos4455/message-broker-v3:latest
-          sleep 10  # Espera o serviço subir
-
-      - name: 🔎 Testar porta 8777
-        run: |
-          if curl -s localhost:8777; then
-            echo "✅ Porta 8777 está ativa!"
-          else
-            echo "❌ Porta 8777 não está ativa!"
-            exit 1
-          fi
-
-      - name: 🧰 Executar UFW dentro do container (em runtime)
-        run: |
-          docker exec broker-container bash -c "apt-get install -y ufw && \
-          ufw allow 8777 && \
-          ufw --force enable"
+      - name: 🚀 Push da imagem para Docker Hub
+        run: docker push chaos4455/message-broker-v3:latest
