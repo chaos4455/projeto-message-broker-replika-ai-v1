@@ -19,6 +19,26 @@ Foi nesse contexto que **eu criei o Replika Message Broker**. Meu objetivo? Ofer
 
 Este projeto é um reflexo da minha visão sobre como construir software resiliente e escalável, aproveitando o melhor do ecossistema Python e das ferramentas de DevOps atuais.
 
+<img width="481" alt="chrome_w1U9g6CbZu" src="https://github.com/user-attachments/assets/07371eed-9471-4784-b543-9b8e8fe120b2" />
+
+<img width="289" alt="chrome_Ns2I6PanRQ" src="https://github.com/user-attachments/assets/1d405056-9f81-4a92-b5e3-3b8524680e92" />
+
+<img width="389" alt="chrome_yutc4iwJAw" src="https://github.com/user-attachments/assets/4b2e6a77-f32c-4f8f-b668-635460ceefae" />
+
+<img width="354" alt="chrome_zt7hfDQlq3" src="https://github.com/user-attachments/assets/097586c6-a219-4764-a605-500a7b9f5c3c" />
+
+<img width="856" alt="chrome_mIb7XWqwWe" src="https://github.com/user-attachments/assets/a4859cf6-04a6-4632-b9f8-ca38c02ebc81" />
+
+<img width="486" alt="chrome_7f4tYiuEK4" src="https://github.com/user-attachments/assets/8129e6ac-a525-4369-85b3-8366c6b88f50" />
+
+<img width="823" alt="chrome_JJ0z3Fka1x" src="https://github.com/user-attachments/assets/5aa6fdcb-8f46-44bc-80e6-c8671c80771e" />
+
+<img width="223" alt="chrome_LB5juHWHuP" src="https://github.com/user-attachments/assets/7a986ce0-3f07-4b3f-aaf5-4804f4d877a3" />
+
+<img width="486" alt="chrome_WQTcxbuNh8" src="https://github.com/user-attachments/assets/840b939e-f1e5-4e72-8926-0c8985cecc15" />
+
+<img width="805" alt="chrome_PjOlztb8og" src="https://github.com/user-attachments/assets/6d60ee5f-f9de-4860-af34-1f79e77e960f" />
+
 ---
 
 ## 📖 Replika Message Broker: Uma Visão Geral
