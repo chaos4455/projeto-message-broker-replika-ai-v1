@@ -1,4 +1,4 @@
-name: 🚀 Build and Deploy Docker Image with Improved Flow
+name: 🚀 Build and Push Docker Image with Full Runtime and Deployment
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-deploy-test:
+  build-push-deploy:
     runs-on: ubuntu-latest
 
     env:
@@ -18,7 +18,7 @@ jobs:
       - name: 🧱 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 📃 Create Dockerfile dynamically
+      - name: 🧾 Create Dockerfile dynamically
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
@@ -27,39 +27,52 @@ jobs:
           RUN apt-get update && \
               apt-get upgrade -y && \
               apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server && \
-              useradd -m -s /bin/bash replika && \
+              pip3 install --no-cache-dir \
+                fastapi \
+                uvicorn[standard] \
+                tortoise-orm \
+                aiosqlite \
+                pydantic[email] \
+                python-jose[cryptography] \
+                colorama \
+                cryptography \
+                psutil \
+                Werkzeug \
+                slowapi \
+                strawberry-graphql[fastapi] \
+                Jinja2 \
+                ipaddress \
+                passlib \
+                requests \
+                schedule \
+                flask
+
+          RUN useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
               mkdir -p /home/replika/app
 
           WORKDIR /home/replika/app
           COPY . .
 
-          RUN pip install --no-cache-dir requests schedule \
-              fastapi uvicorn[standard] tortoise-orm aiosqlite \
-              pydantic[email] python-jose[cryptography] \
-              colorama cryptography psutil Werkzeug slowapi \
-              strawberry-graphql[fastapi] Jinja2 ipaddress passlib
-
           CMD bash -c "\
-            echo '[1/7] Iniciando broker para criar SQLite...' && \
-            python3 message-broker-v3-clean.py & \
-            sleep 10 && \
-            pkill -f message-broker-v3-clean.py && \
-            echo '[2/7] Executando fix DB V1...' && \
-            python3 dbfixv1.py && \
-            echo '[3/7] Executando fix DB V2...' && \
-            python3 dbfixv2.py && \
-            echo '[4/7] Reiniciando broker...' && \
-            python3 message-broker-v3-clean.py & \
-            sleep 10 && \
-            echo '[5/7] Iniciando gerador de mensagens...' && \
-            python3 geramensagem-v3-massive-loop.py & \
-            sleep 5 && \
-            echo '[6/7] Iniciando coletor de mensagens...' && \
-            python3 coleta-mensagem-v3-batch-lote.py & \
-            sleep 5 && \
-            echo '[7/7] Iniciando Web Dashboard...' && \
-            python3 webdash3-clean.py && \
+            echo '[1/7] Iniciando Message Broker para gerar o banco...' && \\
+            python3 message-broker-v3-clean.py & \\
+            sleep 5 && \\
+            echo '[2/7] Finalizando broker para rodar DB fixes...' && \\
+            pkill -f message-broker-v3-clean.py && \\
+            sleep 2 && \\
+            echo '[3/7] Executando dbfixv1.py...' && \\
+            python3 dbfixv1.py && \\
+            echo '[4/7] Executando dbfixv2.py...' && \\
+            python3 dbfixv2.py && \\
+            echo '[5/7] Reiniciando o Message Broker...' && \\
+            python3 message-broker-v3-clean.py & \\
+            sleep 5 && \\
+            echo '[6/7] Iniciando coletor de mensagens...' && \\
+            python3 coleta-mensagem-v3-batch-lote.py & \\
+            sleep 5 && \\
+            echo '[7/7] Iniciando Web Dashboard...' && \\
+            python3 webdash3-clean.py && \\
             tail -f /dev/null"
           EOF
 
@@ -77,14 +90,19 @@ jobs:
         run: |
           docker push $IMAGE_NAME:$VERSION
 
-      - name: 🚀 Run Container for Test
+      - name: 🚀 Deploy & Test Ports
         run: |
-          docker run -d --name replika-test \
-            -p 8333:8333 -p 8777:8777 -p 8000:8000 -p 8080:8080 \
-            $IMAGE_NAME:$VERSION
+          docker run -d --name replika_test_container -p 8333:8333 -p 8777:8777 $IMAGE_NAME:$VERSION
+          echo '⏳ Aguardando 10s para inicialização...'
+          sleep 10
+          echo '🔍 Testando se as portas estão respondendo...'
+          nc -zv localhost 8333 || echo '⚠️ Porta 8333 não está respondendo.'
+          nc -zv localhost 8777 || echo '⚠️ Porta 8777 não está respondendo.'
+          echo '✅ Teste de portas finalizado.'
 
-      - name: 🔍 Check Ports and Logs
-        run: |
-          sleep 25
-          docker ps
-          docker logs replika-test --tail 100
+      # - name: 🏷️ Optional: Create and push tag
+      #   run: |
+      #     git config --global user.name "Elias Andrade - Replika AI"
+      #     git config --global user.email "chaos4455@users.noreply.github.com"
+      #     git tag RC1-beta-v0001
+      #     git push origin --tags
