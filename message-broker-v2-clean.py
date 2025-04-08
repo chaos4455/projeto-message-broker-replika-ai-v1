@@ -8,6 +8,7 @@ import secrets
 import sys
 import time
 import traceback
+import re # Import missing re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, AsyncGenerator, Union # Added Union
@@ -32,7 +33,8 @@ try:
     import uvicorn
 
     from jose import JWTError, jwt
-    from pydantic import BaseModel, ValidationError, Field, EmailStr, ConfigDict
+    # Pydantic v2+ usage
+    from pydantic import BaseModel, ValidationError, Field, EmailStr, ConfigDict, field_validator
 
     # Tortoise already imported above
 
@@ -62,7 +64,7 @@ except ImportError as e:
     print(f"\nERROR: Missing dependency '{missing_pkg}'.")
     print("Please install all required packages by running:")
     # Updated install command list
-    print("\n  pip install fastapi uvicorn[standard] tortoise-orm aiosqlite pydantic[email] python-jose[cryptography] colorama cryptography psutil Werkzeug slowapi strawberry-graphql[fastapi] Jinja2 ipaddress passlib # Add passlib if using hashed passwords\n")
+    print("\n  pip install fastapi uvicorn[standard] tortoise-orm aiosqlite pydantic[email] python-jose[cryptography] colorama cryptography psutil Werkzeug slowapi strawberry-graphql[fastapi] Jinja2 ipaddress passlib Werkzeug\n")
     sys.exit(1)
 
 # --- Basic Setup ---
@@ -70,8 +72,8 @@ init(autoreset=True) # Initialize Colorama
 
 # --- Settings ---
 class Settings:
-    PROJECT_NAME: str = "Message Broker API V3.1.4 (FastAPI/Tortoise/ConsumeFix)" # Updated Name
-    VERSION: str = "0.3.1.4-fastapi-tortoise-fixed-consume" # Updated Version
+    PROJECT_NAME: str = "Message Broker API V3.1.5 (FastAPI/Tortoise/Fixes)" # Updated Name
+    VERSION: str = "0.3.1.5-fastapi-tortoise-fixes" # Updated Version
     API_PORT: int = 8777
     # IMPORTANT: Generate a strong secret key and set it via environment variable in production!
     # Example generation: python -c 'import secrets; print(secrets.token_hex(32))'
@@ -244,12 +246,21 @@ def generate_self_signed_cert(cert_path: str, key_path: str, key_password: Optio
         return False
 
 # --- Application State & Stats ---
+# Store timestamp as datetime object
+# This dictionary holds the *source* data for the /stats endpoint
 app_stats: Dict[str, Any] = {
     "start_time": datetime.now(timezone.utc),
-    "requests_total": 0, "requests_by_route": {}, "requests_by_status": {},
-    "queues_total": 0, "messages_total": 0, "messages_pending": 0,
-    "messages_processing": 0, "messages_processed": 0, "messages_failed": 0,
-    "last_error": None, "last_error_timestamp": None,
+    "requests_total": 0,
+    "requests_by_route": {}, # Structure: {"/path": {"GET": count, "POST": count}, ...}
+    "requests_by_status": {}, # Structure: {"200": count, "404": count, ...}
+    "queues_total": 0,
+    "messages_total": 0,
+    "messages_pending": 0,
+    "messages_processing": 0,
+    "messages_processed": 0,
+    "messages_failed": 0,
+    "last_error": None,
+    "last_error_timestamp": None, # <<< Keep as datetime or None
     "system": {
         "python_version": platform.python_version(), "platform": platform.system(),
         "platform_release": platform.release(), "architecture": platform.machine(),
@@ -268,20 +279,26 @@ async def update_request_stats(route_template: str, method: str, status_code: in
     """Increment request counters safely."""
     async with stats_lock:
         app_stats["requests_total"] += 1
+        # Update requests by route/method
         route_stats = app_stats["requests_by_route"].setdefault(route_template, {})
         route_stats[method] = route_stats.get(method, 0) + 1
-        app_stats["requests_by_status"][str(status_code)] = app_stats["requests_by_status"].get(str(status_code), 0) + 1
+        # Update requests by status code
+        status_code_str = str(status_code) # Ensure status code is string key
+        app_stats["requests_by_status"][status_code_str] = app_stats["requests_by_status"].get(status_code_str, 0) + 1
+        # Log the update for debugging if needed (set level higher than DEBUG usually)
+        log_debug(f"Stats Update: route='{route_template}', method='{method}', status={status_code}. New totals: route={route_stats[method]}, status={app_stats['requests_by_status'][status_code_str]}", icon_type='STATS')
 
 async def update_broker_stats():
     """Fetch queue and message counts from DB and update stats."""
     log_pipeline("📊 Fetching broker stats from DB...", icon_type='STATS')
     try:
-        # Use asyncio.gather for concurrent DB queries
-        # Ensure Tortoise is initialized before calling this
-        if not Tortoise._connections:
+        # <<< FIX: Check if Tortoise connections are initialized >>>
+        # Using `Tortoise.apps` is a slightly more public/stable way than `_connections`
+        if not Tortoise.apps:
              log_warning("DB not initialized, cannot update broker stats.", icon_type='DB')
              return
 
+        # Use asyncio.gather for concurrent DB queries
         q_count_task = Queue.all().count()
         m_pending_task = Message.filter(status='pending').count()
         m_processing_task = Message.filter(status='processing').count()
@@ -303,14 +320,16 @@ async def update_broker_stats():
             # Clear last error if update was successful and it was a stats update error
             if app_stats["last_error"] and "Broker Stats Update Failed" in app_stats["last_error"]:
                  app_stats["last_error"] = None
-                 app_stats["last_error_timestamp"] = None
+                 app_stats["last_error_timestamp"] = None # Reset timestamp as well
         log_success("📊 Broker stats updated.", icon_type='STATS', extra={'counts': {'queues': q_count, 'pending': pending, 'processing': processing, 'processed': processed, 'failed': failed}})
     except Exception as e:
-        error_time = datetime.now(timezone.utc).isoformat()
+        # Store timestamp as datetime object here
+        error_time = datetime.now(timezone.utc)
+        error_msg = f"Broker Stats Update Failed at {error_time.isoformat()}: {type(e).__name__}"
         log_error(f"Error updating broker stats: {e}", icon_type='STATS', exc_info=True)
         async with stats_lock:
-            app_stats["last_error"] = f"Broker Stats Update Failed: {error_time}"
-            app_stats["last_error_timestamp"] = error_time
+            app_stats["last_error"] = error_msg
+            app_stats["last_error_timestamp"] = error_time # <<< Store datetime object
 
 # --- Tortoise ORM Setup ---
 async def init_tortoise():
@@ -324,14 +343,15 @@ async def init_tortoise():
         log_info("💾 Generating DB schemas if necessary...", icon_type='DB')
         await Tortoise.generate_schemas(safe=True) # Creates tables if they don't exist, doesn't alter existing ones dangerously
         log_success("💾 ORM tables verified/created successfully.", icon_type='DB')
-        await update_broker_stats() # Initial stats population after DB is ready
+        # Initial stats population only after DB is confirmed ready
+        await update_broker_stats()
     except Exception as e:
         log_critical(f"Fatal: Failed to initialize Tortoise ORM: {e}", icon_type='CRITICAL', exc_info=True)
         sys.exit(1) # Cannot run without DB
 
 # --- Pydantic Models (Data Validation & Serialization) ---
 # Use ConfigDict for Pydantic V2+
-# Enable population_by_field_name to allow using field names or aliases
+# Enable populate_by_name=True to allow using field names or aliases
 # Enable from_attributes=True to allow creating models from ORM objects
 PYDANTIC_CONFIG = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -380,13 +400,16 @@ class Token(BaseModel):
     token_type: str = "bearer"
     model_config = PYDANTIC_CONFIG
 
+# <<< FIX: Correct typing for timestamp fields >>>
+# This model defines the structure of the JSON response for the /stats endpoint
 class StatsResponse(BaseModel):
-    start_time: str
+    start_time: datetime # Keep as datetime, Pydantic handles serialization to ISO string
     uptime_seconds: float
     uptime_human: str
     requests_total: int
-    requests_by_route: Dict[str, Dict[str, int]]
-    requests_by_status: Dict[str, int]
+    # These match the keys in app_stats and the dashboard's expectations
+    requests_by_route: Dict[str, Dict[str, int]] = Field(description="Count of requests per route template and HTTP method")
+    requests_by_status: Dict[str, int] = Field(description="Count of requests per HTTP status code")
     queues_total: int
     messages_total: int
     messages_pending: int
@@ -394,9 +417,9 @@ class StatsResponse(BaseModel):
     messages_processed: int
     messages_failed: int
     last_error: Optional[str]
-    last_error_timestamp: Optional[datetime]
+    last_error_timestamp: Optional[datetime] # Keep as datetime, Pydantic handles serialization
     system: Dict[str, Any]
-    broker_specific: Dict[str, str]
+    broker_specific: Dict[str, Any] # Allow more flexibility here
     model_config = PYDANTIC_CONFIG
 
 class LogFileResponse(BaseModel):
@@ -613,45 +636,77 @@ async def validate_refresh_token(credentials: Optional[HTTPAuthorizationCredenti
 async def update_stats_middleware(request: Request, call_next):
     """Middleware to update request stats and add X-Process-Time header."""
     start_time_mw = time.perf_counter()
+    response = None # Initialize response to None
+    status_code = 500 # Default to 500 in case of early exception
     try:
         response = await call_next(request)
+        process_time_mw = time.perf_counter() - start_time_mw
+        response.headers["X-Process-Time"] = f"{process_time_mw:.4f}s"
+        status_code = response.status_code # Get status code from actual response
+
     except Exception as e:
-         # If an exception occurs deeper in the stack, ensure we still log it and re-raise
-         # This helps catch errors not handled by specific exception handlers
+         # If an exception occurs deeper in the stack, log it and re-raise
+         # Let the global exception handlers determine the final status code
          process_time_mw = time.perf_counter() - start_time_mw
-         log_error(f"Unhandled exception during request processing ({request.method} {request.url.path}) after {process_time_mw:.4f}s: {e}", exc_info=True)
-         # Let the global exception handler create the final 500 response
+         # Log the unhandled exception here BEFORE it gets caught by global handlers
+         # Use a distinct log message to differentiate from the global handler log
+         log_error(
+             f"Unhandled exception propagated to stats middleware ({request.method} {request.url.path}) after {process_time_mw:.4f}s: {type(e).__name__}: {e}",
+             exc_info=True, # Include traceback here for context
+             icon_type='ERROR'
+         )
+         # Re-raise the exception to be handled by FastAPI's exception handlers
          raise e
     finally:
-        # This block runs even if an exception occurred
-        process_time_mw = time.perf_counter() - start_time_mw
+        # Update stats regardless of whether an exception occurred, using the determined status code
+        # Note: If an exception occurred, `response` might be None if `call_next` failed early
+        route = request.scope.get("route")
+        if route and hasattr(route, 'path'):
+            route_template = route.path
 
-    # Add process time header regardless of response status
-    try:
-       response.headers["X-Process-Time"] = f"{process_time_mw:.4f}s"
-    except NameError: # response might not be defined if exception happened very early
-       pass
+            # --- FIX: Corrected ignore logic for stats ---
+            # Define prefixes/paths to ignore for request counting more accurately
+            # Ignore docs, IDEs, OpenAPI schema, GraphQL IDE/schema, and favicons by prefix
+            ignored_prefixes = ('/docs', '/redoc', '/openapi.json', '/graphql', '/favicon.ico')
+            # Ignore the root health check path, the stats endpoint itself, and the log listing endpoint explicitly by path
+            ignored_paths = ('/', '/stats', '/logs') # Note: /logs/{filename} WILL be counted now.
+
+            # Check if the current route should be ignored
+            should_ignore = False
+            if route_template:
+                if any(route_template.startswith(prefix) for prefix in ignored_prefixes):
+                    should_ignore = True
+                    log_debug(f"Ignoring stats update for route (prefix match): {route_template}", icon_type='STATS')
+                elif route_template in ignored_paths:
+                     should_ignore = True
+                     log_debug(f"Ignoring stats update for route (path match): {route_template}", icon_type='STATS')
+            # --- End FIX ---
+
+            # Only update stats if the route should NOT be ignored
+            if route_template and not should_ignore:
+                try:
+                    # Use the status_code determined above (either from response or 500 for exception)
+                    await update_request_stats(route_template, request.method, status_code)
+                except Exception as stats_e:
+                     # Log error if stats update fails, but don't fail the request
+                     log_error(f"Failed to update request stats: {stats_e}", icon_type='STATS', exc_info=True)
+            # else: # Kept for potential debugging
+            #    if route_template: # Only log if template was found but ignored
+            #        log_debug(f"Final decision: Ignoring stats update for route: {route_template}", icon_type='STATS')
 
 
-    # Update stats only for relevant API routes (exclude docs, logs, etc.)
-    route = request.scope.get("route")
-    if route and hasattr(route, 'path'):
-        route_template = route.path
-        # Define prefixes/paths to ignore for request counting
-        # Adjusted to avoid counting stats/logs requests themselves
-        ignored_prefixes = ('/docs', '/redoc', '/openapi.json', '/logs', '/graphql', '/favicon.ico', '/stats', '/')
-        ignored_paths = ('/',) # Add specific paths if needed
+    # If response was successfully generated, return it
+    if response:
+        return response
+    else:
+        # This case should ideally be handled by the global exception handler re-raising,
+        # but as a fallback, return a generic error if response is still None.
+        log_critical("Middleware finished without a response object (likely due to early exception). Returning 500.", icon_type="CRITICAL")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Internal server error occurred during request processing."},
+        )
 
-        if route_template and \
-           not any(route_template.startswith(prefix) for prefix in ignored_prefixes) and \
-           route_template not in ignored_paths:
-            try:
-                await update_request_stats(route_template, request.method, response.status_code)
-            except Exception as stats_e:
-                 # Log error if stats update fails, but don't fail the request
-                 log_error(f"Failed to update request stats: {stats_e}", icon_type='STATS', exc_info=True)
-
-    return response
 
 # --- Helper Function for DB Lookups with 404 ---
 async def _get_queue_or_404(queue_name: str, conn=None) -> Queue:
@@ -659,6 +714,7 @@ async def _get_queue_or_404(queue_name: str, conn=None) -> Queue:
     try:
         query = Queue.all()
         if conn: # If a transaction connection is provided, use it
+            # Correct way to apply connection to a QuerySet
             query = query.using_connection(conn)
         # Fetch the queue by name
         queue = await query.get(name=queue_name)
@@ -782,13 +838,14 @@ async def get_stats(request: Request, current_user: str = Depends(get_current_us
             for part in partitions:
                 # Filter out unwanted types and potentially problematic mounts
                 unwanted_fstypes = ['squashfs', 'tmpfs', 'devtmpfs', 'fuse.gvfsd-fuse', 'overlay', 'autofs']
-                if 'loop' in part.device or 'snap' in part.device or part.fstype in unwanted_fstypes:
+                mountpoint = getattr(part, 'mountpoint', None)
+                if not mountpoint or 'loop' in part.device or 'snap' in part.device or part.fstype in unwanted_fstypes:
                     continue
                 try:
                     # Check mountpoint exists before getting usage
-                    if os.path.exists(part.mountpoint):
-                       usage = psutil.disk_usage(part.mountpoint)
-                       disk_usage_data[part.mountpoint] = {
+                    if os.path.exists(mountpoint):
+                       usage = psutil.disk_usage(mountpoint)
+                       disk_usage_data[mountpoint] = {
                            "total_gb": round(usage.total / (1024**3), 2),
                            "used_gb": round(usage.used / (1024**3), 2),
                            "free_gb": round(usage.free / (1024**3), 2),
@@ -796,10 +853,19 @@ async def get_stats(request: Request, current_user: str = Depends(get_current_us
                        }
                 except (FileNotFoundError, PermissionError, OSError) as part_e:
                     # Log errors for specific partitions but continue
-                    log_warning(f"Could not get disk usage for {getattr(part, 'mountpoint', 'N/A')}: {part_e}", icon_type='STATS')
+                    log_warning(f"Could not get disk usage for {mountpoint}: {part_e}", icon_type='STATS')
 
             # Load average (only available on Unix-like systems)
             load_avg = os.getloadavg() if hasattr(os, 'getloadavg') else "N/A"
+
+            # Gather open file descriptors and thread count carefully
+            open_fds = "N/A"
+            thread_count = "N/A"
+            try: open_fds = len(process.open_files())
+            except (psutil.AccessDenied, NotImplementedError, Exception) as fd_e: log_warning(f"Could not get open file descriptors: {fd_e}", icon_type="STATS")
+            try: thread_count = process.num_threads()
+            except (psutil.AccessDenied, NotImplementedError, Exception) as th_e: log_warning(f"Could not get thread count: {th_e}", icon_type="STATS")
+
 
             return {
                 "cpu_percent": sys_cpu,
@@ -814,8 +880,10 @@ async def get_stats(request: Request, current_user: str = Depends(get_current_us
                 "load_average": load_avg,
                 "cpu_count_logical": psutil.cpu_count(logical=True),
                 "cpu_count_physical": psutil.cpu_count(logical=False),
-                "open_file_descriptors": len(process.open_files()) if hasattr(process, 'open_files') else "N/A",
-                "thread_count": process.num_threads() if hasattr(process, 'num_threads') else "N/A",
+                "open_file_descriptors": open_fds,
+                "thread_count": thread_count,
+                # <<< Dashboard expects process_memory_mb, let's add it >>>
+                "process_memory_mb": round(mem_info.rss / (1024**2), 2) # Using RSS as the main process memory metric
             }
         # Run the synchronous function in a separate thread
         system_metrics = await asyncio.to_thread(_get_psutil_data_sync)
@@ -831,9 +899,14 @@ async def get_stats(request: Request, current_user: str = Depends(get_current_us
     response_data = {}
     async with stats_lock:
         # Create a copy to avoid modifying the global state directly while processing
+        # Ensure all expected keys from app_stats are copied
         current_stats_copy = app_stats.copy()
+
         # Merge collected system metrics into the system info dictionary
-        current_stats_copy["system"] = {**current_stats_copy["system"], **system_metrics}
+        # Ensure the 'system' key exists before merging
+        if "system" not in current_stats_copy:
+            current_stats_copy["system"] = {}
+        current_stats_copy["system"].update(system_metrics)
 
         # Calculate uptime
         start_time_dt = current_stats_copy["start_time"]
@@ -852,21 +925,34 @@ async def get_stats(request: Request, current_user: str = Depends(get_current_us
         if seconds or not parts: parts.append(f"{seconds}s") # Always show seconds if other parts are zero
         current_stats_copy["uptime_human"] = " ".join(parts)
 
-        # Format start time and potential error timestamp as ISO strings
-        current_stats_copy["start_time"] = start_time_dt.isoformat()
-        if current_stats_copy.get("last_error_timestamp"):
-             current_stats_copy["last_error_timestamp"] = current_stats_copy["last_error_timestamp"].isoformat()
+        # Timestamps (`start_time`, `last_error_timestamp`) are already datetime objects
+        # Pydantic's `StatsResponse` model will handle serialization to ISO strings.
+
+        # --- Ensure required fields for the dashboard are present ---
+        # The middleware should be populating these, but ensure they exist in the dict before validation
+        current_stats_copy.setdefault("requests_by_route", {})
+        current_stats_copy.setdefault("requests_by_status", {})
+        # ---
 
         response_data = current_stats_copy
+
+        # Debugging: Log the exact data structure being passed to validation
+        log_debug(f"Data before Pydantic validation in /stats: {response_data}", icon_type="STATS")
 
     log_success(f"Stats returned for user '{current_user}'.", icon_type='STATS')
     # Validate the final structure against the Pydantic model before returning
     try:
-        return StatsResponse.model_validate(response_data)
+        # Pydantic automatically converts datetime to ISO strings during validation/serialization
+        validated_response = StatsResponse.model_validate(response_data)
+        # Log the structure *after* validation/serialization if needed for debugging dashboard issues
+        # log_debug(f"Data *after* Pydantic validation/serialization in /stats: {validated_response.model_dump_json(indent=2)}", icon_type="STATS")
+        return validated_response
     except ValidationError as e:
+        # Log the validation error and the data that failed
         log_critical(f"Stats data failed Pydantic validation: {e.errors()}", icon_type='CRITICAL', extra={"invalid_stats_data": response_data})
         # Return 500 if the generated stats don't match the model schema
         raise HTTPException(status_code=500, detail="Internal Server Error: Failed to generate valid stats data.")
+
 
 
 @app.get("/logs", response_model=LogFileResponse, tags=["Monitoring"], summary="List Log Files")
@@ -946,8 +1032,10 @@ async def get_log_file(
                         if end is not None and line_num_1based > end:
                             break
                         # Add the line (strip whitespace)
-                        lines_to_process.append(line.strip())
-                        line_count_read += 1
+                        stripped_line = line.strip()
+                        if stripped_line: # Avoid adding empty lines
+                            lines_to_process.append(stripped_line)
+                            line_count_read += 1
                         # Safety break: Limit lines read if only start is given (prevent huge reads)
                         if start is not None and end is None and line_count_read >= 10000:
                             log_warning(f"Log read for {safe_filename} truncated at 10000 lines due to missing 'end' parameter.", icon_type='LOGS')
@@ -964,7 +1052,7 @@ async def get_log_file(
         # --- Parse JSON lines ---
         parsed_lines: List[Dict[str, Any]] = []
         for i, line in enumerate(lines_to_process):
-            if not line: continue # Skip empty lines
+            if not line: continue # Skip empty lines (double check)
 
             line_num_info = f"tail_{i+1}" if tail else (start or 1) + i # Approximate original line number for context
             try:
@@ -1160,76 +1248,76 @@ async def publish_message(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error publishing message")
 
 
-@app.get("/queues/{queue_name}/messages/consume", response_model=Optional[MessageConsumeResponse], tags=["Messages"], summary="Consume Message")
-@limiter.limit(settings.HIGH_TRAFFIC_RATE_LIMIT) # High traffic endpoint
-async def consume_message(
-    request: Request,
-    queue_name: str = Path(..., description="The name of the queue to consume from."),
-    current_user: str = Depends(get_current_user) # Requires authentication
-) -> Optional[MessageConsumeResponse]:
+@app.post("/messages/{message_id}/ack", response_model=MessageResponse, tags=["Messages"], summary="Acknowledge Message")
+@limiter.limit(settings.HIGH_TRAFFIC_RATE_LIMIT)  # High traffic endpoint
+async def acknowledge_message(
+    request: Request,  # Added request parameter for rate limiter
+    message_id: int = Path(..., description="The ID of the message to acknowledge."),
+    current_user: str = Depends(get_current_user)  # Requires authentication
+) -> MessageResponse:
     """
-    Atomically consumes the oldest 'pending' message from the specified queue.
-    It finds the oldest pending message, locks it, updates its status to 'processing',
-    and returns it. Uses a database transaction with SELECT FOR UPDATE for atomicity.
-    Returns the message details if successful, or `null` (empty 200 OK) if the queue is empty.
+    Acknowledges a previously consumed message by marking it as 'completed'.
+    This confirms the message has been successfully processed by the consumer.
+    The message must be in the 'processing' state to be acknowledged.
+    Returns the final message status details.
     Requires authentication.
     """
-    client_host = request.client.host if request.client else 'N/A'
-    log_info(f"📩 GET /queues/{queue_name}/messages/consume request by '{current_user}'", icon_type='MSG', extra={"client": client_host})
+    log_info(f"✅ POST /messages/{message_id}/ack request by '{current_user}'", icon_type='MSG')
 
     try:
-        # 1. Ensure queue exists (outside transaction is fine, reduces transaction duration)
-        queue = await _get_queue_or_404(queue_name)
-
-        # 2. Start Transaction for atomic find-and-update
-        async with in_transaction("default") as tx: # "default" matches the connection name in Tortoise.init
-            # 3. Find the oldest pending message, lock it for update, using the transaction connection
-            #    *** THIS IS THE CORRECTED QUERY CHAIN (FIX APPLIED HERE) ***
-            message = await Message.filter(queue=queue, status='pending') \
-                                   .order_by('created_at') \
-                                   .using_connection(tx) \
-                                   .select_for_update(skip_locked=True) \
-                                   .first() # Get the first matching message or None
-
-            # 4. Check if a message was found
+        # Start transaction for atomic operations
+        async with in_transaction("default") as tx:
+            # Find the message - must exist and be in 'processing' state
+            message = await Message.filter(id=message_id).select_for_update().first()
+            
             if not message:
-                # Queue is empty (or all messages are locked/processed/failed)
-                log_debug(f"Queue '{queue_name}' is empty or no pending messages available.", icon_type='MSG')
-                # Return None, FastAPI handles this as a 200 OK with null body for Optional[] return type
-                return None
-
-            # 5. Update the message status and timestamp within the transaction
-            message.status = 'processing'
-            message.updated_at = datetime.now(timezone.utc) # Record time it entered processing state
-
-            # 6. Save the changes using the transaction connection
-            #    *** ENSURE SAVE USES THE TRANSACTION ***
-            await message.save(using_connection=tx, update_fields=['status', 'updated_at'])
-            # Transaction commits automatically upon exiting the 'with' block successfully
-
-        # 7. Message successfully consumed and status updated. Log and return details.
-        log_success(f"✅ Message ID {message.id} consumed from queue '{queue_name}' by '{current_user}' (status -> processing).", icon_type='MSG')
-        # Return the consumed message details, validated by Pydantic
-        return MessageConsumeResponse(
-            message_id=message.id,
+                log_warning(f"Message ID {message_id} not found during acknowledgment.", icon_type='MSG')
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Message with ID {message_id} not found."
+                )
+                
+            if message.status != 'processing':
+                log_warning(f"Cannot acknowledge message ID {message_id}: invalid status '{message.status}' (must be 'processing').", icon_type='MSG')
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Message must be in 'processing' status to be acknowledged. Current status: {message.status}"
+                )
+                
+            # Update message status to completed
+            message.status = 'completed'
+            message.updated_at = datetime.now(timezone.utc)  # Record completion time
+            
+            # Save the changes
+            await message.save(update_fields=['status', 'updated_at'])
+            
+            # Get queue name for response
+            queue = await message.queue
+            queue_name = queue.name if queue else "unknown"  # Fallback if relationship query fails
+        
+        # Transaction committed successfully at this point
+        log_success(f"✅ Message ID {message_id} successfully acknowledged (status -> completed).", icon_type='MSG')
+        
+        # Return success response using MessageResponse model
+        return MessageResponse(
+            id=message.id,
             queue=queue_name,
             content=message.content,
-            status=message.status, # Should be 'processing'
-            retrieved_at=message.updated_at # The time it was marked as processing
+            status=message.status,  # Will be 'completed'
+            created_at=message.created_at,
+            updated_at=message.updated_at  # Timestamp of acknowledgment
         )
-
-    except HTTPException:
-        # Re-raise exceptions like 404 if the queue wasn't found initially
-        raise
-    except IntegrityError as e:
-        # This might occur if there's a very rare race condition not caught by select_for_update
-        # or other DB constraint issues during the update.
-        log_warning(f"DB integrity error during consumption from '{queue_name}': {e}", icon_type='DB')
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Database conflict during message consumption, please try again.")
+        
+    except HTTPException as http_exc:
+        # Re-raise HTTP exceptions - already logged by handler
+        raise http_exc
     except Exception as e:
-        # Catch any other unexpected errors during the process
-        log_error(f"Error consuming message from queue '{queue_name}': {type(e).__name__}: {e}", icon_type='CRITICAL', exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error consuming message")
+        # Log unexpected errors and return 500
+        log_error(f"Error acknowledging message {message_id}: {str(e)}", icon_type='ERROR', exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error acknowledging message"
+        )
 
 
 @app.post("/messages/{message_id}/ack", status_code=status.HTTP_200_OK, response_model=Dict[str, str], tags=["Messages"], summary="Acknowledge Message")
@@ -1250,7 +1338,6 @@ async def acknowledge_message(
         # Start transaction for atomic find-and-update
         async with in_transaction("default") as tx:
             # Find the message by ID *only if its status is 'processing'*, lock it, using the transaction
-            # *** CORRECTED QUERY AND HANDLING ***
             message = await Message.filter(id=message_id, status='processing') \
                                    .using_connection(tx) \
                                    .select_for_update() \
@@ -1259,10 +1346,11 @@ async def acknowledge_message(
             # Check if the message was found in the correct state
             if not message:
                 # If not found in 'processing' state, check if it exists at all or has a different status
+                # Check status without locking again, just to provide a better error message
                 existing_msg_status = await Message.filter(id=message_id) \
                                                    .using_connection(tx) \
                                                    .values_list('status', flat=True) \
-                                                   .first() # Check status without locking again
+                                                   .first()
                 if existing_msg_status:
                     # Message exists but is not 'processing' (e.g., already acked, failed, or still pending)
                     log_warning(f"ACK failed for message {message_id}: Expected status 'processing', found '{existing_msg_status}'.", icon_type='MSG')
@@ -1322,7 +1410,6 @@ async def negative_acknowledge_message(
         # Start transaction for atomic find-and-update
         async with in_transaction("default") as tx:
             # Find the message by ID *only if its status is 'processing'*, lock it, using the transaction
-            # *** CORRECTED QUERY AND HANDLING ***
             message = await Message.filter(id=message_id, status='processing') \
                                    .using_connection(tx) \
                                    .select_for_update() \
@@ -1524,6 +1611,12 @@ class MutationGQL:
          # context = info.context
          # if not context.get("current_user"): raise Exception("Authentication required")
          try:
+             # Validate name format (redundant if using Pydantic input type, but good practice here)
+             if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+                 raise ValueError("Invalid queue name format. Use alphanumeric, underscore, hyphen.")
+             if len(name) > 255:
+                 raise ValueError("Queue name exceeds maximum length of 255 characters.")
+
              # Use get_or_create for atomicity
              new_queue, created = await Queue.get_or_create(name=name)
              if not created:
@@ -1532,6 +1625,9 @@ class MutationGQL:
              log_success(f"GQL: Queue '{name}' created (ID: {new_queue.id}).", icon_type='QUEUE')
              # Convert ORM model to GQL type for the response
              return QueueGQL(id=strawberry.ID(str(new_queue.id)), name=new_queue.name, created_at=new_queue.created_at, updated_at=new_queue.updated_at)
+         except ValueError as ve: # Catch validation errors
+              log_warning(f"GraphQL 'create_queue' validation error for name '{name}': {ve}", icon_type='GRAPHQL')
+              raise Exception(str(ve)) # Re-raise with message
          except Exception as e:
              log_error(f"GraphQL 'create_queue' mutation error for name '{name}': {e}", icon_type='GRAPHQL', exc_info=True)
              # Re-raise for Strawberry to handle, providing a user-friendly message
@@ -1559,14 +1655,22 @@ class MutationGQL:
         log_info(f"🍓 GraphQL Mutation: publish_message (queue='{queue_name}')", icon_type='GRAPHQL')
         # Add authentication check if needed
         try:
+            # Validate content length (example)
+            if not content:
+                 raise ValueError("Message content cannot be empty.")
+
             queue = await Queue.get_or_none(name=queue_name)
             if not queue:
                 raise Exception(f"Queue with name '{queue_name}' not found.")
+
             # Create the message
             new_message = await Message.create(queue=queue, content=content, status='pending')
             log_success(f"GQL: Message ID {new_message.id} published to queue '{queue_name}'.", icon_type='MSG')
             # Convert ORM model to GQL type for the response
             return MessageGQL.from_orm(new_message, queue_name_str=queue_name)
+        except ValueError as ve:
+             log_warning(f"GraphQL 'publish_message' validation error to queue '{queue_name}': {ve}", icon_type='GRAPHQL')
+             raise Exception(str(ve))
         except Exception as e:
             log_error(f"GraphQL 'publish_message' mutation error to queue '{queue_name}': {e}", icon_type='GRAPHQL', exc_info=True)
             raise Exception(f"Failed to publish message to queue '{queue_name}': {e}")
@@ -1641,10 +1745,13 @@ async def tortoise_integrity_error_handler(request: Request, exc: IntegrityError
     """Handles Tortoise ORM's IntegrityError (e.g., unique constraint violations), returning 409."""
     detail = "Database conflict occurred."
     # Try to get more specific error info from the exception arguments (driver-dependent)
-    if hasattr(exc, 'args') and exc.args:
-        # Avoid leaking overly detailed SQL errors in production
-        error_info = str(exc.args[0]) if settings.APP_ENV == 'development' else "Constraint violation."
-        detail += f" Details: {error_info}"
+    # Be cautious about leaking internal details
+    error_info_str = str(exc) # Get the base error string
+    if "UNIQUE constraint failed" in error_info_str:
+        detail = "A resource with the same unique identifier already exists."
+    elif settings.APP_ENV == 'development': # Show more details only in dev
+        detail += f" Error: {error_info_str}"
+
     client_host = request.client.host if request.client else "N/A"
     log_warning(f"Database Integrity Conflict: {exc} ({request.method} {request.url.path})", icon_type='DB', extra={"client": client_host})
     return JSONResponse(
@@ -1654,13 +1761,20 @@ async def tortoise_integrity_error_handler(request: Request, exc: IntegrityError
 
 @app.exception_handler(ValidationError)
 async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
-    """Handles Pydantic validation errors (e.g., invalid request body), returning 422."""
+    """Handles Pydantic validation errors (e.g., invalid request body/params), returning 422."""
     client_host = request.client.host if request.client else "N/A"
-    log_warning(f"Request Validation Error (Pydantic): {exc.errors()} ({request.method} {request.url.path})", icon_type='HTTP', extra={"client": client_host})
+    try:
+        # Use Pydantic's json() method for standardized error output
+        error_content = {"detail": "Request validation failed", "errors": json.loads(exc.json())}
+        log_warning(f"Request Validation Error (Pydantic): {error_content['errors']} ({request.method} {request.url.path})", icon_type='HTTP', extra={"client": client_host})
+    except Exception as json_err: # Fallback if json.loads fails for some reason
+        log_error(f"Error parsing Pydantic validation errors: {json_err}", icon_type="ERROR")
+        error_content = {"detail": "Request validation failed", "errors": str(exc)} # Simple string representation
+        log_warning(f"Request Validation Error (Pydantic - raw): {str(exc)} ({request.method} {request.url.path})", icon_type='HTTP', extra={"client": client_host})
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        # Use Pydantic's json() method for standardized error output
-        content={"detail": "Request validation failed", "errors": json.loads(exc.json())}
+        content=error_content
     )
 
 @app.exception_handler(HTTPException)
@@ -1704,10 +1818,10 @@ async def generic_exception_handler(request: Request, exc: Exception):
             "full_traceback": tb_str if settings.APP_ENV == 'development' else "Traceback hidden in production"
         }
     )
-    # Update app stats to indicate the last error
+    # Update app stats to indicate the last error (store datetime object)
     async with stats_lock:
         app_stats["last_error"] = f"Unhandled {type(exc).__name__} at {request.method} {request.url.path}"
-        app_stats["last_error_timestamp"] = error_time
+        app_stats["last_error_timestamp"] = error_time # <<< Store datetime object
 
     # Return a generic 500 response to the client
     return JSONResponse(
@@ -1717,6 +1831,9 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 # --- Main Execution Block ---
 if __name__ == '__main__':
+    # Add missing import for regex used in GraphQL mutation validation
+    import re
+
     log_info("🏁 Main execution block entered...", icon_type='SETUP')
 
     # --- SSL Certificate Check/Generation ---
@@ -1773,7 +1890,8 @@ if __name__ == '__main__':
     if log_level_uvicorn == 'debug' and reload_enabled:
         log_level_uvicorn = 'debug' # Keep debug for dev reload
     elif log_level_uvicorn == 'debug':
-        log_level_uvicorn = 'info' # Default to info if not in dev reload
+         # Avoid overly verbose uvicorn logs in non-reloading debug mode unless explicitly desired
+        log_level_uvicorn = 'info'
 
     # --- Start Uvicorn Server ---
     log_info(f"🌐🚀 Starting Uvicorn server on https://0.0.0.0:{settings.API_PORT}", icon_type='STARTUP', extra={"reload": reload_enabled, "log_level": log_level_uvicorn})
@@ -1792,9 +1910,9 @@ if __name__ == '__main__':
             ssl_keyfile=settings.KEY_FILE, # Path to SSL private key
             ssl_certfile=settings.CERT_FILE, # Path to SSL certificate
             reload=reload_enabled, # Enable auto-reload if in development
-            use_colors=True # Use colors in Uvicorn's console output if terminal supports it
-            # Consider adding access_log=False in production if logs are handled elsewhere to reduce noise
-            # access_log=(settings.APP_ENV == "development")
+            use_colors=True, # Use colors in Uvicorn's console output if terminal supports it
+            # Disable uvicorn access logs if our middleware/logging is sufficient
+            access_log=False # Set to True if you want uvicorn's default access logs
         )
     except KeyboardInterrupt:
         # Handle Ctrl+C gracefully
