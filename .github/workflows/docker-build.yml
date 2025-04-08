@@ -1,4 +1,4 @@
-name: 🚀 Build and Push Docker Image with Full Runtime and Deployment
+name: ✨ Build and Deploy Broker + Dashboard Only
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: 🧱 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 🧾 Create Dockerfile dynamically
+      - name: 📜 Create Dockerfile dynamically
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
@@ -55,23 +55,19 @@ jobs:
           COPY . .
 
           CMD bash -c "\
-            echo '[1/7] Iniciando Message Broker para gerar o banco...' && \\
+            echo '[1/5] Iniciando Message Broker para gerar o banco...' && \\
             python3 message-broker-v3-clean.py & \\
             sleep 5 && \\
-            echo '[2/7] Finalizando broker para rodar DB fixes...' && \\
+            echo '[2/5] Finalizando broker para rodar DB fixes...' && \\
             pkill -f message-broker-v3-clean.py && \\
             sleep 2 && \\
-            echo '[3/7] Executando dbfixv1.py...' && \\
+            echo '[3/5] Executando dbfixv1.py e dbfixv2.py...' && \\
             python3 dbfixv1.py && \\
-            echo '[4/7] Executando dbfixv2.py...' && \\
             python3 dbfixv2.py && \\
-            echo '[5/7] Reiniciando o Message Broker...' && \\
+            echo '[4/5] Reiniciando o Message Broker...' && \\
             python3 message-broker-v3-clean.py & \\
             sleep 5 && \\
-            echo '[6/7] Iniciando coletor de mensagens...' && \\
-            python3 coleta-mensagem-v3-batch-lote.py & \\
-            sleep 5 && \\
-            echo '[7/7] Iniciando Web Dashboard...' && \\
+            echo '[5/5] Iniciando Web Dashboard...' && \\
             python3 webdash3-clean.py && \\
             tail -f /dev/null"
           EOF
@@ -99,10 +95,3 @@ jobs:
           nc -zv localhost 8333 || echo '⚠️ Porta 8333 não está respondendo.'
           nc -zv localhost 8777 || echo '⚠️ Porta 8777 não está respondendo.'
           echo '✅ Teste de portas finalizado.'
-
-      # - name: 🏷️ Optional: Create and push tag
-      #   run: |
-      #     git config --global user.name "Elias Andrade - Replika AI"
-      #     git config --global user.email "chaos4455@users.noreply.github.com"
-      #     git tag RC1-beta-v0001
-      #     git push origin --tags
