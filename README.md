@@ -20,6 +20,166 @@ Como **Arquiteto de Sistemas de IA**, **Desenvolvedor Python Full-Cycle** e um e
 
 ![screencapture-file-C-projeto-message-broker-replika-ai-v1-doc-web-diagram-20250408-004137-c1fa35d6-html-2025-04-08-00_42_31](https://github.com/user-attachments/assets/ce8c8ea2-7262-4c52-a352-e7d94c54df48)
 
+# 🚀 Message Broker Replika: Rede, Serviços e Deploy
+
+[![Docker](https://img.shields.io/badge/Docker-chaos4455/message--broker--replika-blueviolet?style=flat-square&logo=docker)](https://hub.docker.com/r/chaos4455/message-broker-replika) [![Build Status](https://img.shields.io/badge/Build-Passing-blueviolet?style=flat-square&logo=githubactions)](.) [![License](https://img.shields.io/badge/License-MIT-blueviolet?style=flat-square)](.)
+
+Este documento descreve a configuração de rede, os serviços internos e as opções de deploy para a imagem `chaos4455/message-broker-replika`.
+
+---
+
+## 1. 🌐 Rede, Portas e Acesso aos Serviços
+
+O container expõe múltiplas portas para acessar seus diferentes serviços. O mapeamento padrão recomendado (host:container) é:
+
+| Porta Externa (Host) | Porta Interna (Container) | Serviço Principal                     | URL de Acesso (Exemplo Localhost)   | Ícone |
+| :------------------- | :------------------------ | :------------------------------------ | :---------------------------------- | :---- |
+| `8222`               | `22`                      | 🔑 Servidor SSH                       | `ssh admin@localhost -p 8222`       | 🖥️    |
+| `8777`               | `8777`                    | ⚡ API Principal (FastAPI)            | `http://localhost:8777`             | ⚡    |
+| `8777/docs`          | `8777/docs`               | 📄 Swagger UI (Documentação API)    | `http://localhost:8777/docs`        | 📄    |
+| `8777/redoc`         | `8777/redoc`              | 📘 ReDoc (Documentação API Alternativa) | `http://localhost:8777/redoc`       | 📘    |
+| `8777/graphql`       | `8777/graphql`            | 🔎 GraphQL Endpoint                  | `http://localhost:8777/graphql`     | 🔎    |
+| `8333`               | `8333`                    | 📊 Dashboard Web (Flask)              | `http://localhost:8333`             | 📊    |
+| `8555`               | `8555`                    | ⚙️ WebApp Gerencial (Streamlit)       | `http://localhost:8555`             | ⚙️    |
+
+**🔐 Credenciais Padrão (Apenas para Testes Locais):**
+
+*   **Usuário:** `admin`
+*   **Senha:** `admin`
+
+**⚠️ Atenção:** Altere estas credenciais em ambientes de produção!
+
+---
+
+## 2. ⚙️ Serviços Internos e Gerenciamento com Supervisor
+
+Dentro do container, o [Supervisor](http://supervisord.org/) gerencia a execução e o ciclo de vida dos seguintes processos essenciais:
+
+| Programa         | Comando Resumido                     | Descrição                                          | Ícone |
+| :--------------- | :----------------------------------- | :------------------------------------------------- | :---- |
+| `sshd`           | `/usr/sbin/sshd -D`                  | 🔑 Servidor SSH.                                   | 🖥️    |
+| `broker-init`    | `python3 message-broker-v3-clean.py` | 🚦 Execução inicial do broker (setup).             | ⏳    |
+| `dbfixv1`        | `python3 dbfixv1.py`                 | 🔧 Correções/migrações de banco (v1).              | 🛠️    |
+| `dbfixv2`        | `python3 dbfixv2.py`                 | 🔧 Correções/migrações de banco (v2).              | 🛠️    |
+| `broker-final`   | `python3 message-broker-v3-clean.py` | ▶️ Execução principal do message broker.           | ⚡    |
+| `webdash`        | `python3 webdash3-clean.py`          | 📊 Dashboard Web (Flask).                          | 📊    |
+| `gerador`        | `geramensagem-v3-massive-loop.py`    | ✉️ Gerador de mensagens de teste.                  | 📨    |
+| `coletor`        | `coleta-mensagem-v3-batch-lote.py`   | 📥 Coletor/processador de mensagens em lote.       | 📥    |
+
+*(Nota: A inicialização é sequencial, controlada por `sleep` na configuração do Supervisor)*
+
+**Para verificar o status dos serviços dentro do container:**
+
+🚀 Deploy e Arquivos de Configuração
+Aqui estão as formas de executar a aplicação e os arquivos de configuração necessários.
+🐳 Opção 1: Docker Run
+
+```bash
+docker exec <nome_do_container> supervisorctl status
+# Exemplo: docker exec message-broker-v33 supervisorctl status
+docker run -d --pull always --name message-broker-v33 \
+  -p 8222:22 \
+  -p 8777:8777 \
+  -p 8333:8333 \
+  -p 8555:8555 \
+  chaos4455/message-broker-replika:latest
+```
+
+🚢 Opção 2: Docker Compose
+Use um arquivo docker-compose.yml para gerenciar a configuração:
+
+
+version: '3.8'
+services:
+  message-broker:
+    image: chaos4455/message-broker-replika:latest
+    container_name: message-broker-replika-compose
+    pull_policy: always
+    ports:
+      - "8222:22"
+      - "8777:8777"
+      - "8333:8333"
+      - "8555:8555"
+    restart: unless-stopped
+
+    docker-compose up -d
+
+    docker-compose down
+
+☸️ Opção 3: Kubernetes (Exemplo Básico)
+Para orquestração com Kubernetes, use os manifests abaixo:
+
+    apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-broker-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: message-broker
+  template:
+    metadata:
+      labels:
+        app: message-broker
+    spec:
+      containers:
+      - name: message-broker-replika
+        image: chaos4455/message-broker-replika:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 22
+          name: ssh
+        - containerPort: 8777
+          name: fastapi
+        - containerPort: 8333
+          name: flask-dash
+        - containerPort: 8555
+          name: streamlit-app
+
+
+ apiVersion: v1
+kind: Service
+metadata:
+  name: message-broker-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: message-broker
+  ports:
+  - name: ssh
+    protocol: TCP
+    port: 8222
+    targetPort: 22
+  - name: fastapi
+    protocol: TCP
+    port: 8777
+    targetPort: 8777
+  - name: flask-dash
+    protocol: TCP
+    port: 8333
+    targetPort: 8333
+  - name: streamlit-app
+    protocol: TCP
+    port: 8555
+    targetPort: 8555
+
+
+
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+
+# Dockerfile resumido (veja o workflow para a versão completa dinâmica)
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y python3 python3-pip openssh-server supervisor ... && rm -rf /var/lib/apt/lists/*
+RUN useradd -m admin && echo "admin:admin" | chpasswd && ... # Config SSH básica
+WORKDIR /home/replika/app
+COPY app /home/replika/app # Copia código da aplicação
+RUN if [ -f requirements.txt ]; then pip3 install --no-cache-dir -r requirements.txt; fi # Instala deps Python
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf # Copia config do Supervisor
+EXPOSE 22 8777 8333 8555 # Documenta portas internas
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
 
 Foi nesse contexto que **eu criei o Replika Message Broker**. Meu objetivo? Oferecer uma alternativa **leve, performática, escrita puramente em Python moderno**, e totalmente alinhada com as práticas de desenvolvimento e operações que prezo: containerização eficiente, automação ponta a ponta e foco na simplicidade operacional.
 
