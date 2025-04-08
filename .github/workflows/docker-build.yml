@@ -1,6 +1,5 @@
 # 📦 GitHub Action: Build and Push Docker Image with Supervisor Runtime + Streamlit Control Center
 
-```yaml
 name: 🚀 Build and Push Docker Image with Supervisor Runtime
 
 on:
@@ -118,9 +117,6 @@ jobs:
       #     git config --global user.email "chaos4455@users.noreply.github.com"
       #     git tag RC1-beta-v0001
       #     git push origin --tags
-```
-
----
 
 ### 📦 `requirements.txt` (completo, sem versões):
 
