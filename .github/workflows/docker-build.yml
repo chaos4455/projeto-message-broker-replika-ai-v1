@@ -1,53 +1,50 @@
-name: 🐳 Build & Push Docker Image for Message Broker
+FROM ubuntu:22.04
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+# --- Atualiza e instala dependências essenciais ---
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip \
+    gcc libpq-dev build-essential \
+    openssh-server sudo ufw \
+    nano vim htop iftop net-tools curl wget unzip iputils-ping \
+    libpam0g-dev libpam-modules && \
+    apt-get clean
 
-jobs:
-  docker-build:
-    runs-on: ubuntu-22.04
+# --- Configura usuário admin com senha admin ---
+RUN useradd -m -s /bin/bash admin && echo 'admin:admin' | chpasswd && echo 'admin ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-    steps:
-      - name: 🔄 Checkout do repositório privado
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+# --- Ativa SSH e configura diretório necessário ---
+RUN mkdir /var/run/sshd
 
-      - name: 📝 Criar Dockerfile dinamicamente
-        run: |
-          cat <<EOF > Dockerfile
-          FROM python:3.11-slim
+# --- Segurança básica (hardening) ---
+# - Bloqueia root remoto
+# - Força uso de senha forte e shell seguro
+# - Impede login de senhas vazias
+RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?UsePAM.*/UsePAM yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
 
-          # Instala dependências de sistema
-          RUN apt-get update && apt-get install -y gcc libpq-dev build-essential && apt-get clean
+# --- UFW: libera as portas desejadas ---
+RUN ufw allow 22 && \
+    ufw allow 8000 && \
+    ufw allow 8080 && \
+    ufw allow 8333 && \
+    ufw allow 8777 && \
+    ufw allow OpenSSH && \
+    ufw --force enable
 
-          # Define diretório de trabalho
-          WORKDIR /app
+# --- Define diretório do app ---
+WORKDIR /app
 
-          # Copia os arquivos do projeto
-          COPY requirements.txt .
-          COPY message-broker-v3-clean.py .
+# --- Copia arquivos do repositório ---
+COPY requirements.txt .
+COPY message-broker-v3-clean.py .
 
-          # Instala bibliotecas Python
-          RUN pip install --no-cache-dir -r requirements.txt
+# --- Instala pacotes Python necessários ---
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-          # Comando padrão ao iniciar o container
-          CMD ["python", "message-broker-v3-clean.py"]
-          EOF
+# --- Expõe as portas do serviço e SSH ---
+EXPOSE 22 8000 8080 8333 8777
 
-      - name: 🐳 Buildar imagem Docker
-        run: |
-          docker build -t chaos4455/message-broker-v3:latest .
-
-      - name: 🔐 Login no Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: 📤 Push da imagem para o Docker Hub
-        run: |
-          docker push chaos4455/message-broker-v3:latest
+# --- Comando principal ---
+CMD service ssh start && python3 message-broker-v3-clean.py
