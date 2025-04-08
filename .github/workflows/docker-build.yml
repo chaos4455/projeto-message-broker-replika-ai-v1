@@ -27,8 +27,8 @@ jobs:
           echo "📁 Limpando diretório de build..."
           rm -rf dockerbuild
           mkdir -p dockerbuild/app
-          sudo apt-get update && sudo apt-get install -y rsync
-          rsync -av --exclude=dockerbuild --exclude=.git --exclude=.github ./ dockerbuild/app/
+          shopt -s extglob
+          cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
 
       - name: 📜 Validando existência de arquivos importantes
         run: |
@@ -44,8 +44,12 @@ jobs:
           FROM ubuntu:22.04
 
           RUN apt-get update && apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat && \
-              pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat
+
+          COPY app/ /home/replika/app/
+
+          RUN test -f /home/replika/app/requirements.txt || (echo "❌ requirements.txt não encontrado!" && exit 1)
+          RUN pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
 
           RUN useradd -m -s /bin/bash admin && \
               echo "admin:admin" | chpasswd && \
@@ -86,7 +90,7 @@ jobs:
 
       - name: 🛠️ Build da Imagem Docker
         run: |
-          docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
+          docker build --pull -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
 
       - name: 🚀 Subindo Container
         run: |
@@ -98,7 +102,7 @@ jobs:
             -p 8333:8333 \
             -p $EXTERNAL_SSH_PORT:22 \
             $DOCKER_IMAGE_NAME
-          echo "⏳ Aguardando o container iniciar..."
+          echo "⏳ Aguardando serviços iniciarem..."
           sleep 20
 
       - name: 🧠 Verificar serviços via Supervisor
@@ -121,7 +125,7 @@ jobs:
             fi
           done
 
-      - name: 📡 Testar portas adicionais (Dashboard, API, Monitor)
+      - name: 📡 Testar portas adicionais
         run: |
           declare -A portas=(
             ["Dashboard (8881)"]=8881
@@ -147,8 +151,14 @@ jobs:
 
       - name: 📦 Listar Processos Ativos
         run: |
-          echo "📋 Processos ativos:"
+          echo "📋 Processos ativos no container:"
           docker exec $DOCKER_CONTAINER_NAME ps aux
+
+      # - name: 🏷️ Tagueamento automático de versão (futuro)
+      #   if: github.ref == 'refs/heads/main'
+      #   run: |
+      #     echo "🔖 Futuro: Gerar tag do tipo RC1-beta-v0001 aqui..."
+      #     # Tagging logic comentada por enquanto, como solicitado
 
       - name: 🧼 Cleanup (opcional)
         if: always()
