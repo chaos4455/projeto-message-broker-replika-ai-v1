@@ -1,4 +1,4 @@
-name: 🚀 Build and Deploy Docker Image with Health Check
+name: 🚀 Build and Deploy Docker Image with Improved Flow
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       - name: 🧱 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 🧾 Create Dockerfile dynamically
+      - name: 📃 Create Dockerfile dynamically
         run: |
           cat <<EOF > Dockerfile
           FROM ubuntu:22.04
@@ -41,13 +41,25 @@ jobs:
               strawberry-graphql[fastapi] Jinja2 ipaddress passlib
 
           CMD bash -c "\
+            echo '[1/7] Iniciando broker para criar SQLite...' && \
             python3 message-broker-v3-clean.py & \
             sleep 10 && \
-            python3 webdash3-clean.py & \
-            sleep 20 && \
+            pkill -f message-broker-v3-clean.py && \
+            echo '[2/7] Executando fix DB V1...' && \
+            python3 dbfixv1.py && \
+            echo '[3/7] Executando fix DB V2...' && \
+            python3 dbfixv2.py && \
+            echo '[4/7] Reiniciando broker...' && \
+            python3 message-broker-v3-clean.py & \
+            sleep 10 && \
+            echo '[5/7] Iniciando gerador de mensagens...' && \
             python3 geramensagem-v3-massive-loop.py & \
             sleep 5 && \
-            python3 coleta-mensagem-v3-batch-lote.py && \
+            echo '[6/7] Iniciando coletor de mensagens...' && \
+            python3 coleta-mensagem-v3-batch-lote.py & \
+            sleep 5 && \
+            echo '[7/7] Iniciando Web Dashboard...' && \
+            python3 webdash3-clean.py && \
             tail -f /dev/null"
           EOF
 
@@ -73,6 +85,6 @@ jobs:
 
       - name: 🔍 Check Ports and Logs
         run: |
-          sleep 20
+          sleep 25
           docker ps
-          docker logs replika-test
+          docker logs replika-test --tail 100
