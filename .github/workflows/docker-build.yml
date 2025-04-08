@@ -1,4 +1,7 @@
-name: 🚀 Build and Push Docker Image with Supervisor Runtime + Streamlit Control Center
+# 📦 GitHub Action: Build and Push Docker Image with Supervisor Runtime + Streamlit Control Center
+
+```yaml
+name: 🚀 Build and Push Docker Image with Supervisor Runtime
 
 on:
   push:
@@ -26,29 +29,8 @@ jobs:
 
           RUN apt-get update && \
               apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor && \
-              pip3 install --no-cache-dir \
-                fastapi \
-                uvicorn[standard] \
-                tortoise-orm \
-                aiosqlite \
-                pydantic[email] \
-                python-jose[cryptography] \
-                colorama \
-                cryptography \
-                psutil \
-                Werkzeug \
-                slowapi \
-                strawberry-graphql[fastapi] \
-                Jinja2 \
-                ipaddress \
-                passlib \
-                requests \
-                schedule \
-                flask \
-                flask_cors \
-                streamlit \
-                paramiko
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor netcat \
+              && pip3 install --no-cache-dir -r /tmp/requirements.txt
 
           RUN useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
@@ -57,12 +39,15 @@ jobs:
           WORKDIR /home/replika/app
           COPY . .
 
+          COPY requirements.txt /tmp/requirements.txt
           COPY supervisord.conf /etc/supervisor/supervisord.conf
+
+          EXPOSE 8333 8777 8555
 
           CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
           EOF
 
-      - name: ⚙️ Create supervisord.conf dynamically
+      - name: 🔧 Create supervisord.conf dynamically
         run: |
           cat <<'EOF' > supervisord.conf
           [supervisord]
@@ -88,7 +73,7 @@ jobs:
           stderr_logfile=/var/log/supervisor/webdash.err.log
           stdout_logfile=/var/log/supervisor/webdash.out.log
 
-          [program:controlcenter]
+          [program:streamlit-center]
           command=streamlit run /home/replika/app/streamlit-control-center-v1.py --server.port=8555 --server.enableCORS=false
           directory=/home/replika/app
           autostart=true
@@ -121,23 +106,51 @@ jobs:
           nc -zv localhost 8333 || echo '⚠️ Porta 8333 não está respondendo.'
           nc -zv localhost 8777 || echo '⚠️ Porta 8777 não está respondendo.'
           nc -zv localhost 8555 || echo '⚠️ Porta 8555 (Streamlit) não está respondendo.'
-          echo '✅ Teste de portas finalizado.'
 
-          echo '📜 Últimos logs do supervisord:'
+          echo '📜 Últimos logs do supervisor:'
           docker exec replika_test_container tail -n 50 /var/log/supervisor/supervisord.log || echo '⚠️ Não foi possível obter logs.'
-
-          echo '📜 Logs do broker:'
-          docker exec replika_test_container tail -n 50 /var/log/supervisor/broker.out.log || echo '⚠️ Sem logs.'
-
-          echo '📜 Logs do dashboard:'
-          docker exec replika_test_container tail -n 50 /var/log/supervisor/webdash.out.log || echo '⚠️ Sem logs.'
-
           echo '📜 Logs do Streamlit:'
           docker exec replika_test_container tail -n 50 /var/log/supervisor/streamlit.out.log || echo '⚠️ Sem logs.'
 
-      # - name: 🍿 Optional: Create and push tag
+      # - name: 🏷️ Optional: Create and push tag
       #   run: |
       #     git config --global user.name "Elias Andrade - Replika AI"
       #     git config --global user.email "chaos4455@users.noreply.github.com"
       #     git tag RC1-beta-v0001
       #     git push origin --tags
+```
+
+---
+
+### 📦 `requirements.txt` (completo, sem versões):
+
+```txt
+fastapi
+uvicorn
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+aioredis
+tortoise-orm
+aerich
+python-dotenv
+pydantic
+pydantic-settings
+loguru
+requests
+colorama
+cryptography
+Werkzeug
+psutil
+schedule
+flask
+flask-cors
+slowapi
+strawberry-graphql[fastapi]
+Jinja2
+ipaddress
+paramiko
+streamlit
+```
+
+Se quiser, posso gerar também um `Dockerfile` estático com base nesse conteúdo dinâmico, para controle de versão. Deseja isso também, Elias?
