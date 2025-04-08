@@ -21,7 +21,7 @@ from markupsafe import Markup # For rendering HTML in info tables safely
 
 # --- Configuration ---
 DASHBOARD_PORT = 8333
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://127.0.0.1:8777").rstrip('/')
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://localhost:8777").rstrip('/')
 API_STATS_URL = f"{API_BASE_URL}/stats"
 API_LOGIN_URL = f"{API_BASE_URL}/login"
 API_QUEUES_URL = f"{API_BASE_URL}/queues"
@@ -359,7 +359,7 @@ def handle_api_errors(error_scope="generic"):
             # --- Prepare Request ---
             headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/json'}
             # Disable SSL verification only for local addresses
-            verify_ssl = not ("127.0.0.1" in API_BASE_URL or "localhost" in API_BASE_URL)
+            verify_ssl = not ("localhost" in API_BASE_URL or "localhost" in API_BASE_URL)
 
             # --- Execute API Call ---
             try:
@@ -419,7 +419,7 @@ def login_to_api():
     """Attempts to login and sets the token in the state."""
     global state
     logger.info(f"Attempting login to API at {API_LOGIN_URL}...")
-    verify_ssl = not ("127.0.0.1" in API_BASE_URL or "localhost" in API_BASE_URL)
+    verify_ssl = not ("localhost" in API_BASE_URL or "localhost" in API_BASE_URL)
     login_success = False
     try:
         response = requests.post(
@@ -2416,7 +2416,7 @@ def toggle_log_refresh():
 # --- Main Execution ---
 if __name__ == '__main__':
     # Disable SSL warnings if running against local API with self-signed cert
-    is_local_api = "127.0.0.1" in API_BASE_URL or "localhost" in API_BASE_URL
+    is_local_api = "localhost" in API_BASE_URL or "localhost" in API_BASE_URL
     if is_local_api:
         try:
             import urllib3
