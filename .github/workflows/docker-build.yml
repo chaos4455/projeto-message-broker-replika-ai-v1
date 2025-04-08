@@ -1,4 +1,4 @@
-name: 🔧 Build Docker Image Replika AI
+name: Build and Push Docker Image with Embedded Dockerfile
 
 on:
   push:
@@ -14,12 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📥 Checkout repositório
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Checkout repo
+      uses: actions/checkout@v3
 
-    - name: 🛠️ Configurar Dockerfile dinâmico
+    - name: 🔨 Gerar Dockerfile dinamicamente
       run: |
         cat <<EOF > Dockerfile
         FROM ubuntu:22.04
@@ -29,16 +27,9 @@ jobs:
 
         RUN apt-get update && \
             apt-get upgrade -y && \
-            apt-get install -y python3 python3-pip ufw git net-tools curl iputils-ping nano openssh-server && \
+            apt-get install -y python3 python3-pip git net-tools curl iputils-ping nano openssh-server && \
             useradd -m -s /bin/bash replika && \
             echo 'replika:replika' | chpasswd && \
-            ufw allow 22 && \
-            ufw allow 8000 && \
-            ufw allow 8080 && \
-            ufw allow 8333 && \
-            ufw allow 8777 && \
-            ufw allow OpenSSH && \
-            ufw --force enable && \
             mkdir -p /home/replika/app
 
         WORKDIR /home/replika/app
@@ -47,29 +38,33 @@ jobs:
             cp temp/*.py ./ && \
             rm -rf temp
 
-        RUN pip3 install -r requirements.txt || true
+        RUN if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
 
-        CMD bash -c "python3 message-broker-v3-clean.py & sleep 5 && python3 webdash3-clean.py & sleep 5 && python3 geramensagem-v3-massive-loop.py & sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && tail -f /dev/null"
+        CMD bash -c "python3 message-broker-v3-clean.py & \
+                     sleep 5 && python3 webdash3-clean.py & \
+                     sleep 5 && python3 geramensagem-v3-massive-loop.py & \
+                     sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \
+                     tail -f /dev/null"
         EOF
 
-    - name: 🐳 Build Docker Image
-      run: |
-        docker build \
-          --build-arg GITHUB_PAT=${{ secrets.MASTERTOKEN }} \
-          -t $IMAGE_NAME:$VERSION .
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-    - name: 🐳 Push to Docker Hub (opcional)
+    - name: Log in to DockerHub 🐳
       uses: docker/login-action@v2
       with:
-        username: ${{ secrets.DOCKER_HUB_USERNAME }}
-        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: 📤 Push imagem para Docker Hub (opcional)
-      run: docker push $IMAGE_NAME:$VERSION
+    - name: Build and push Docker image 🚀
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+        build-args: |
+          GITHUB_PAT=${{ secrets.MASTERTOKEN }}
 
-    # - name: 🏷️ Criar nova tag (desativado por enquanto)
-    #   run: |
-    #     git config --global user.name "Elias Andrade - Replika AI"
-    #     git config --global user.email "chaos4455@users.noreply.github.com"
-    #     git tag RC1-beta-v0001
-    #     git push https://x-access-token:${{ secrets.MASTERTOKEN }}@github.com/chaos4455/projeto-message-broker-replika-ai-v1 --tags
+    - name: ✅ Finalizado
+      run: echo "Imagem Docker criada e publicada com sucesso!"
