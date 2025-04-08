@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-broker-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: message-broker
+  template:
+    metadata:
+      labels:
+        app: message-broker
+    spec:
+      containers:
+      - name: message-broker-replika
+        image: chaos4455/message-broker-replika:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 22
+          name: ssh
+        - containerPort: 8777
+          name: fastapi
+        - containerPort: 8333
+          name: flask-dash
+        - containerPort: 8555
+          name: streamlit-app
