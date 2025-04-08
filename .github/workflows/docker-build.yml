@@ -105,7 +105,7 @@ jobs:
           autorestart=true
 
           [program:webdash]
-          command=/bin/bash -c "sleep 55 && python3 webdash3-clean.py"
+          command=/bin/bash -c "sleep 55 && python3 webdashv2-clean.py"
           directory=/home/replika/app
           autostart=true
           autorestart=true
