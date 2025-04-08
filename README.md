@@ -15,6 +15,12 @@
 
 Como **Arquiteto de Sistemas de IA**, **Desenvolvedor Python Full-Cycle** e um entusiasta apaixonado por **DevOps e práticas de CI/CD**, percebi em muitos projetos, especialmente aqueles envolvendo microsserviços e fluxos de dados assíncronos para treinamento ou inferência de IA, a necessidade de uma ferramenta de mensageria que fosse ao mesmo tempo **poderosa e descomplicada**. Muitas soluções existentes, embora robustas, traziam uma complexidade e um consumo de recursos que nem sempre se justificavam.
 
+<img width="1920" alt="chrome_snnH7HC5f1" src="https://github.com/user-attachments/assets/2b9d7454-8a45-4586-8c69-cceb68cd7a37" />
+
+
+![screencapture-file-C-projeto-message-broker-replika-ai-v1-doc-web-diagram-20250408-004137-c1fa35d6-html-2025-04-08-00_42_31](https://github.com/user-attachments/assets/ce8c8ea2-7262-4c52-a352-e7d94c54df48)
+
+
 Foi nesse contexto que **eu criei o Replika Message Broker**. Meu objetivo? Oferecer uma alternativa **leve, performática, escrita puramente em Python moderno**, e totalmente alinhada com as práticas de desenvolvimento e operações que prezo: containerização eficiente, automação ponta a ponta e foco na simplicidade operacional.
 
 Este projeto é um reflexo da minha visão sobre como construir software resiliente e escalável, aproveitando o melhor do ecossistema Python e das ferramentas de DevOps atuais.
@@ -81,6 +87,14 @@ A filosofia por trás do Replika é **simplicidade e performance**. Ele não ten
 *   ✅ **Gerenciamento de Processos:** Uso de `supervisord` dentro do container para garantir que a API e o dashboard estejam sempre rodando.
 *   ✅ **Rate Limiting:** Proteção básica contra abuso da API (configurável).
 *   ✅ **CORS:** Configuração flexível de Cross-Origin Resource Sharing.
+
+
+<img width="1091" alt="chrome_7Iw6F4DGjQ" src="https://github.com/user-attachments/assets/9ab69f40-4bb8-4605-aa68-750ef00f1e45" />
+
+
+<img width="1087" alt="chrome_OfCQUHyUY3" src="https://github.com/user-attachments/assets/3063ea80-956d-4e66-9d4d-de9b7278152c" />
+
+
 
 ---
 
