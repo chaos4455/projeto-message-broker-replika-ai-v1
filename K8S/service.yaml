@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: message-broker-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: message-broker
+  ports:
+  - name: ssh
+    protocol: TCP
+    port: 8222
+    targetPort: 22
+  - name: fastapi
+    protocol: TCP
+    port: 8777
+    targetPort: 8777
+  - name: flask-dash
+    protocol: TCP
+    port: 8333
+    targetPort: 8333
+  - name: streamlit-app
+    protocol: TCP
+    port: 8555
+    targetPort: 8555
