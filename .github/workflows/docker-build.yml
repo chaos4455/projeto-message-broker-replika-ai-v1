@@ -1,4 +1,4 @@
-name: 🧪 Build, Deploy & Test Full Docker App with Supervisor, Streamlit, SSH & Services
+name: 🔨 Build and Verify Docker Streamlit + SSH + Services App
 
 on:
   push:
@@ -6,45 +6,63 @@ on:
       - main
 
 jobs:
-  build-and-verify:
+  build-and-test:
     runs-on: ubuntu-latest
+
     env:
       DOCKER_IMAGE_NAME: chaos4455/vectorial-profiler:latest
+      DOCKER_CONTAINER_NAME: vectorial-profiler
+      EXTERNAL_SSH_PORT: 8222
 
     steps:
-      - name: 📦 Checkout do Código
+      - name: 📥 Clonando Repositório
         uses: actions/checkout@v3
 
-      - name: 📁 Preparar Estrutura de Build
+      - name: 🔄 Garantindo Pull de Últimos Dados
         run: |
-          echo "📁 Preparando diretório temporário para build..."
-          mkdir -p dockerbuild/app
-          shopt -s extglob
-          cp -r !(dockerbuild) dockerbuild/app
-          cd dockerbuild
+          git pull origin main || echo "⚠️ Aviso: Falha ao executar git pull, talvez não seja necessário."
 
-          echo "🔧 Gerando Dockerfile dinamicamente..."
-          cat <<EOF > Dockerfile
+      - name: 📁 Preparando diretório temporário para build
+        run: |
+          echo "📁 Limpando diretório de build..."
+          rm -rf dockerbuild
+          mkdir -p dockerbuild/app
+          cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
+
+      - name: 📜 Validando existência de arquivos importantes
+        run: |
+          ls -lah dockerbuild/app
+          if [ ! -f dockerbuild/app/requirements.txt ]; then
+            echo "❌ Arquivo requirements.txt ausente!"
+            exit 1
+          fi
+
+      - name: 📝 Gerando Dockerfile Dinamicamente
+        run: |
+          cat <<EOF > dockerbuild/Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && \
-              apt-get upgrade -y && \
+          RUN apt-get update && apt-get upgrade -y && \
               apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor && \
-              pip3 install --no-cache-dir -r /home/replika/app/requirements.txt || true
+              pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
 
+          # Configuração de usuário admin
           RUN useradd -m -s /bin/bash admin && \
               echo "admin:admin" | chpasswd && \
               echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
               echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
               mkdir -p /var/run/sshd
 
+          # Copiando configuração do Supervisor
           COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
           WORKDIR /home/replika/app
           CMD ["/usr/bin/supervisord"]
           EOF
 
-          echo "🧾 Gerando supervisord.conf dinamicamente..."
-          cat <<EOF > supervisord.conf
+      - name: ⚙️ Gerando supervisord.conf Dinamicamente
+        run: |
+          cat <<EOF > dockerbuild/supervisord.conf
           [supervisord]
           nodaemon=true
 
@@ -62,82 +80,76 @@ jobs:
           autorestart=true
           stdout_logfile=/var/log/supervisor/streamlit.log
           stderr_logfile=/var/log/supervisor/streamlit.err.log
-
-          [program:message-broker-master-api]
-          command=python3 /home/replika/app/message-broker-v3-clean.py
-          directory=/home/replika/app
-          autostart=true
-          autorestart=true
-          stdout_logfile=/var/log/supervisor/broker.log
-          stderr_logfile=/var/log/supervisor/broker.err.log
-
-          [program:dash-monitor]
-          command=python3 /home/replika/app/webdash3-clean.py
-          directory=/home/replika/app
-          autostart=true
-          autorestart=true
-          stdout_logfile=/var/log/supervisor/monitor.log
-          stderr_logfile=/var/log/supervisor/monitor.err.log
           EOF
 
-      - name: 🔒 Login no Docker Hub
+      - name: 🔐 Login no Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u chaos4455 --password-stdin
 
-      - name: 🐳 Build da Imagem Docker
+      - name: 🛠️ Build da Imagem Docker
         run: |
-          cd dockerbuild
-          docker build -t $DOCKER_IMAGE_NAME .
+          docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
 
-      - name: 🚀 Subir Container com Múltiplas Portas
+      - name: 🚀 Subindo Container
         run: |
-          docker run -d --name vectorial-profiler \
+          docker rm -f $DOCKER_CONTAINER_NAME || true
+          docker run -d --name $DOCKER_CONTAINER_NAME \
             -p 8555:8555 \
             -p 8881:8881 \
             -p 8777:8777 \
             -p 8333:8333 \
-            -p 8222:22 \
+            -p $EXTERNAL_SSH_PORT:22 \
             $DOCKER_IMAGE_NAME
           sleep 20
 
-      - name: 🧠 Verificar Serviços do Supervisor
-        run: docker exec vectorial-profiler supervisorctl status
-
-      - name: 🔍 Testar Abertura das Portas dos Serviços
+      - name: 🧠 Verificar serviços via Supervisor
         run: |
-          portas=(8555 8881 8777 8333)
-          for porta in "${portas[@]}"; do
-            echo "🔍 Testando porta $porta..."
-            for tentativa in {1..5}; do
-              sleep 5
-              if curl -s http://localhost:$porta | grep -iq "html\|streamlit\|api"; then
-                echo "✅ Porta $porta está respondendo"
-                break
-              elif [ "$tentativa" -eq 5 ]; then
-                echo "❌ Porta $porta não respondeu a tempo."
-                docker logs vectorial-profiler || true
-              fi
-            done
+          echo "🔍 Status do Supervisor:"
+          docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "❌ Falha ao coletar status do supervisor."
+
+      - name: 🔎 Verificar se Streamlit subiu (porta 8555)
+        run: |
+          for i in {1..6}; do
+            echo "⏳ Tentativa $i: Verificando Streamlit em http://localhost:8555"
+            sleep 10
+            if curl -s http://localhost:8555 | grep -iq "streamlit"; then
+              echo "✅ Streamlit ativo na porta 8555"
+              break
+            elif [ "$i" -eq 6 ]; then
+              echo "❌ Streamlit não respondeu corretamente na porta 8555"
+              docker logs $DOCKER_CONTAINER_NAME
+              exit 1
+            fi
           done
 
-      - name: 🔐 Testar acesso SSH via porta 8222
+      - name: 📡 Testar portas adicionais
         run: |
+          declare -A portas=(
+            ["Dashboard (8881)"]=8881
+            ["Broker Master API (8777)"]=8777
+            ["Dash Monitor (8333)"]=8333
+          )
+          for nome in "${!portas[@]}"; do
+            porta=${portas[$nome]}
+            echo "🔎 Testando $nome - Porta $porta..."
+            nc -zv 127.0.0.1 $porta && echo "✅ $nome OK!" || echo "❌ Falha ao acessar $nome"
+          done
+
+      - name: 🔐 Testar SSH (porta 8222)
+        run: |
+          echo "⏳ Aguardando o SSH ficar pronto..."
           sleep 10
-          echo "📡 Testando conexão SSH na porta 8222 (login admin/admin)..."
-          sshpass -p admin ssh -o StrictHostKeyChecking=no -p 8222 admin@localhost 'echo "✅ Login SSH bem-sucedido!"' || echo "❌ Falha no login SSH"
+          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ Login SSH bem-sucedido!"' || echo "❌ Falha no login SSH!"
 
-      - name: 📋 Listar Processos Ativos no Container
-        run: docker exec vectorial-profiler ps aux
-
-      - name: 🪵 Logs do Supervisor
-        run: docker exec vectorial-profiler cat /var/log/supervisor/supervisord.log || echo "❌ Falha ao coletar logs"
-
-      - name: 📄 Mostrar Todos os Logs Individuais
+      - name: 🪵 Coletar Logs do Supervisor
         run: |
-          for log in sshd streamlit broker monitor; do
-            echo "\n📄 Log de \$log:"
-            docker exec vectorial-profiler cat /var/log/supervisor/\$log.log || true
-          done
+          echo "📑 Logs do Supervisor:"
+          docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs."
 
-      - name: 🧼 Cleanup Final
+      - name: 📦 Listar Processos Ativos
+        run: |
+          echo "📋 Processos ativos:"
+          docker exec $DOCKER_CONTAINER_NAME ps aux
+
+      - name: 🧼 Cleanup (opcional)
         if: always()
-        run: docker rm -f vectorial-profiler || true
+        run: docker rm -f $DOCKER_CONTAINER_NAME || true
