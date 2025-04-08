@@ -45,7 +45,8 @@ jobs:
                 passlib \
                 requests \
                 schedule \
-                flask
+                flask \
+                flask_cors
 
           RUN useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
@@ -77,7 +78,7 @@ jobs:
           stdout_logfile=/var/log/supervisor/broker.out.log
 
           [program:webdash]
-          command=python3 /home/replika/app/webdash3-clean.py
+          command=python3 /home/replika/app/webdashv2-clean.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
@@ -103,14 +104,18 @@ jobs:
       - name: 🚀 Deploy & Test Ports
         run: |
           docker run -d --name replika_test_container -p 8333:8333 -p 8777:8777 $IMAGE_NAME:$VERSION
-          echo '⏳ Aguardando 10s para inicialização...'
-          sleep 10
+          echo '⏳ Aguardando 15s para inicialização dos serviços...'
+          sleep 15
           echo '🔍 Testando se as portas estão respondendo...'
           nc -zv localhost 8333 || echo '⚠️ Porta 8333 não está respondendo.'
           nc -zv localhost 8777 || echo '⚠️ Porta 8777 não está respondendo.'
           echo '✅ Teste de portas finalizado.'
-          echo '📜 Logs iniciais do supervisord:'
-          docker logs replika_test_container | tail -n 50
+          echo '📜 Últimos logs do supervisord:'
+          docker exec replika_test_container tail -n 50 /var/log/supervisor/supervisord.log || echo '⚠️ Não foi possível obter logs.'
+          echo '📜 Últimos logs do broker:'
+          docker exec replika_test_container tail -n 50 /var/log/supervisor/broker.out.log || echo '⚠️ Sem logs.'
+          echo '📜 Últimos logs do dashboard:'
+          docker exec replika_test_container tail -n 50 /var/log/supervisor/webdash.out.log || echo '⚠️ Sem logs.'
 
       # - name: 🏷️ Optional: Create and push tag
       #   run: |
