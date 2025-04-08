@@ -152,5 +152,3 @@ ipaddress
 paramiko
 streamlit
 ```
-
-Se quiser, posso gerar também um `Dockerfile` estático com base nesse conteúdo dinâmico, para controle de versão. Deseja isso também, Elias?
