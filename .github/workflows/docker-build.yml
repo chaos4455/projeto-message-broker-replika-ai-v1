@@ -27,6 +27,7 @@ jobs:
           RUN apt-get update && \
               apt-get upgrade -y && \
               apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server && \
+              pip3 install --no-cache-dir requests && \
               useradd -m -s /bin/bash replika && \
               echo 'replika:replika' | chpasswd && \
               mkdir -p /home/replika/app
@@ -58,10 +59,3 @@ jobs:
       - name: 📤 Push Docker Image
         run: |
           docker push $IMAGE_NAME:$VERSION
-
-      # - name: 🏷️ Optional: Create and push tag
-      #   run: |
-      #     git config --global user.name "Elias Andrade - Replika AI"
-      #     git config --global user.email "chaos4455@users.noreply.github.com"
-      #     git tag RC1-beta-v0001
-      #     git push origin --tags
