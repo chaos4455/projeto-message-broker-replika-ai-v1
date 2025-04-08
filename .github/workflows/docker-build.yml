@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DOCKER_IMAGE_NAME: chaos4455/vectorial-profiler:latest
-      DOCKER_CONTAINER_NAME: vectorial-profiler
+      DOCKER_IMAGE_NAME: chaos4455/message-broker-replika:latest
+      DOCKER_CONTAINER_NAME: message-broker-replika
       EXTERNAL_SSH_PORT: 8222
 
     steps:
@@ -20,46 +20,46 @@ jobs:
 
       - name: 🔄 Garantindo Pull de Últimos Dados
         run: |
-          git pull origin main || echo "⚠️ Aviso: Falha ao executar git pull, talvez não seja necessário."
+          git pull origin main || echo "⚠️ Pull falhou ou não era necessário."
 
-      - name: 📁 Preparando diretório temporário para build
+      - name: 📁 Preparando diretório de build com exclusão
+        shell: bash
         run: |
-          echo "📁 Limpando diretório de build..."
+          echo "📁 Limpando diretório dockerbuild..."
           rm -rf dockerbuild
           mkdir -p dockerbuild/app
           shopt -s extglob
           cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
+          shopt -u extglob
 
-      - name: 📜 Validando existência de arquivos importantes
+      - name: 📜 Validando existência de arquivos essenciais
         run: |
           ls -lah dockerbuild/app
-          if [ ! -f dockerbuild/app/requirements.txt ]; then
-            echo "❌ Arquivo requirements.txt ausente!"
-            exit 1
-          fi
+          [ -f dockerbuild/app/requirements.txt ] || (echo "❌ requirements.txt ausente!" && exit 1)
 
       - name: 📝 Gerando Dockerfile Dinamicamente
         run: |
           cat <<EOF > dockerbuild/Dockerfile
           FROM ubuntu:22.04
 
-          RUN apt-get update && apt-get upgrade -y && \
-              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat
+          RUN apt-get update && \
+              apt-get upgrade -y && \
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server supervisor sshpass netcat && \
+              mkdir -p /var/run/sshd
 
-          COPY app/ /home/replika/app/
-
-          RUN test -f /home/replika/app/requirements.txt || (echo "❌ requirements.txt não encontrado!" && exit 1)
-          RUN pip3 install --no-cache-dir -r /home/replika/app/requirements.txt
-
+          # Criação de usuário admin com SSH
           RUN useradd -m -s /bin/bash admin && \
               echo "admin:admin" | chpasswd && \
               echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-              echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
-              mkdir -p /var/run/sshd
+              echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
 
+          # Copiando app
+          COPY app /home/replika/app
           COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
           WORKDIR /home/replika/app
+          RUN pip3 install --no-cache-dir -r requirements.txt
+
           CMD ["/usr/bin/supervisord"]
           EOF
 
@@ -73,24 +73,39 @@ jobs:
           command=/usr/sbin/sshd -D
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/sshd.log
-          stderr_logfile=/var/log/supervisor/sshd.err.log
 
-          [program:streamlit-dashboard]
-          command=python3 /home/replika/app/streamlit-control-center-v1.py
+          [program:message-broker]
+          command=python3 /home/replika/app/message-broker-v3-clean.py
           directory=/home/replika/app
           autostart=true
           autorestart=true
-          stdout_logfile=/var/log/supervisor/streamlit.log
-          stderr_logfile=/var/log/supervisor/streamlit.err.log
+          stdout_logfile=/var/log/supervisor/message-broker.log
+          stderr_logfile=/var/log/supervisor/message-broker.err
+
+          [program:webdash]
+          command=python3 /home/replika/app/webdash3-clean.py
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
+
+          [program:geramensagem]
+          command=python3 /home/replika/app/geramensagem-v3-massive-loop.py
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
+
+          [program:coleta]
+          command=python3 /home/replika/app/coleta-mensagem-v3-batch-lote.py
+          directory=/home/replika/app
+          autostart=true
+          autorestart=true
           EOF
 
       - name: 🔐 Login no Docker Hub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u chaos4455 --password-stdin
 
       - name: 🛠️ Build da Imagem Docker
-        run: |
-          docker build --pull -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
+        run: docker build -t $DOCKER_IMAGE_NAME -f dockerbuild/Dockerfile dockerbuild
 
       - name: 🚀 Subindo Container
         run: |
@@ -102,63 +117,34 @@ jobs:
             -p 8333:8333 \
             -p $EXTERNAL_SSH_PORT:22 \
             $DOCKER_IMAGE_NAME
-          echo "⏳ Aguardando serviços iniciarem..."
-          sleep 20
+          sleep 30
 
-      - name: 🧠 Verificar serviços via Supervisor
-        run: |
-          echo "🔍 Status do Supervisor:"
-          docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "❌ Falha ao coletar status do supervisor."
+      - name: 🧠 Verificar Supervisor
+        run: docker exec $DOCKER_CONTAINER_NAME supervisorctl status || echo "⚠️ Falha ao verificar status."
 
-      - name: 🔎 Verificar se Streamlit subiu (porta 8555)
-        run: |
-          for i in {1..6}; do
-            echo "⏳ Tentativa $i: Verificando Streamlit em http://localhost:8555"
-            sleep 10
-            if curl -s http://localhost:8555 | grep -iq "streamlit"; then
-              echo "✅ Streamlit ativo na porta 8555"
-              break
-            elif [ "$i" -eq 6 ]; then
-              echo "❌ Streamlit não respondeu corretamente na porta 8555"
-              docker logs $DOCKER_CONTAINER_NAME
-              exit 1
-            fi
-          done
-
-      - name: 📡 Testar portas adicionais
+      - name: 📡 Testar portas abertas
         run: |
           declare -A portas=(
-            ["Dashboard (8881)"]=8881
-            ["Broker Master API (8777)"]=8777
+            ["Dashboard Web (8881)"]=8881
+            ["Message Broker API (8777)"]=8777
             ["Dash Monitor (8333)"]=8333
           )
           for nome in "${!portas[@]}"; do
             porta=${portas[$nome]}
-            echo "🔎 Testando $nome - Porta $porta..."
-            nc -zv 127.0.0.1 $porta && echo "✅ $nome OK!" || echo "❌ Falha ao acessar $nome"
+            echo "🔎 Verificando $nome na porta $porta..."
+            nc -zv 127.0.0.1 $porta && echo "✅ Porta $porta OK" || echo "❌ Porta $porta falhou"
           done
 
-      - name: 🔐 Testar SSH (porta 8222)
+      - name: 🔐 Testar SSH na porta 8222
         run: |
-          echo "⏳ Aguardando o SSH ficar pronto..."
           sleep 10
-          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ Login SSH bem-sucedido!"' || echo "❌ Falha no login SSH!"
+          sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ SSH OK!"' || echo "❌ SSH falhou"
 
-      - name: 🪵 Coletar Logs do Supervisor
-        run: |
-          echo "📑 Logs do Supervisor:"
-          docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs."
+      - name: 🧾 Logs do Supervisor
+        run: docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs"
 
-      - name: 📦 Listar Processos Ativos
-        run: |
-          echo "📋 Processos ativos no container:"
-          docker exec $DOCKER_CONTAINER_NAME ps aux
-
-      # - name: 🏷️ Tagueamento automático de versão (futuro)
-      #   if: github.ref == 'refs/heads/main'
-      #   run: |
-      #     echo "🔖 Futuro: Gerar tag do tipo RC1-beta-v0001 aqui..."
-      #     # Tagging logic comentada por enquanto, como solicitado
+      - name: 📦 Processos Ativos no Container
+        run: docker exec $DOCKER_CONTAINER_NAME ps aux
 
       - name: 🧼 Cleanup (opcional)
         if: always()
