@@ -15,7 +15,7 @@ jobs:
       EXTERNAL_SSH_PORT: 8222
 
     steps:
-      - name: 📥 Clonando Repositório
+      - name: 📅 Clonando Repositório
         uses: actions/checkout@v3
 
       - name: 🔄 Garantindo Pull de Últimos Dados
@@ -26,9 +26,10 @@ jobs:
           echo "📁 Limpando diretório de build..."
           rm -rf dockerbuild
           mkdir -p dockerbuild/app
+          shopt -s extglob
           cp -r !(dockerbuild|.git|.github) dockerbuild/app || true
 
-      - name: 📜 Validando existência de arquivos importantes
+      - name: 📋 Validando existência de arquivos importantes
         run: |
           ls -lah dockerbuild/app
           if [ ! -f dockerbuild/app/requirements.txt ]; then
@@ -154,9 +155,9 @@ jobs:
           sleep 10
           sshpass -p 'admin' ssh -o StrictHostKeyChecking=no -p $EXTERNAL_SSH_PORT admin@localhost 'echo "✅ Login SSH bem-sucedido!"' || echo "❌ Falha no login SSH!"
 
-      - name: 🪵 Coletar Logs do Supervisor
+      - name: 🧵 Coletar Logs do Supervisor
         run: |
-          echo "📑 Logs do Supervisor:"
+          echo "📁 Logs do Supervisor:"
           docker exec $DOCKER_CONTAINER_NAME cat /var/log/supervisor/supervisord.log || echo "⚠️ Falha ao obter logs."
 
       - name: 📦 Listar Processos Ativos
@@ -164,6 +165,6 @@ jobs:
           echo "📋 Processos ativos:"
           docker exec $DOCKER_CONTAINER_NAME ps aux
 
-      - name: 🧼 Cleanup (opcional)
+      - name: 🪜 Cleanup (opcional)
         if: always()
         run: docker rm -f $DOCKER_CONTAINER_NAME || true
