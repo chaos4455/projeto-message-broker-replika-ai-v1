@@ -1,70 +1,67 @@
-name: Build and Push Docker Image with Embedded Dockerfile
+name: 🚀 Build and Push Docker Image
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-env:
-  IMAGE_NAME: chaos4455/message-broker-replika
-  VERSION: latest
+    branches:
+      - main
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGE_NAME: chaos4455/message-broker-replika
+      VERSION: latest
+      DOCKERHUB_USERNAME: chaos4455
+
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v3
+      - name: 🧱 Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: 🔨 Gerar Dockerfile dinamicamente
-      run: |
-        cat <<EOF > Dockerfile
-        FROM ubuntu:22.04
+      - name: 🧾 Create Dockerfile dynamically
+        run: |
+          cat <<'EOF' > Dockerfile
+          FROM ubuntu:22.04
+          ENV DEBIAN_FRONTEND=noninteractive
 
-        ARG GITHUB_PAT
-        ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update && \
+              apt-get upgrade -y && \
+              apt-get install -y python3 python3-pip curl git net-tools iputils-ping nano openssh-server && \
+              useradd -m -s /bin/bash replika && \
+              echo 'replika:replika' | chpasswd && \
+              mkdir -p /home/replika/app
 
-        RUN apt-get update && \
-            apt-get upgrade -y && \
-            apt-get install -y python3 python3-pip git net-tools curl iputils-ping nano openssh-server && \
-            useradd -m -s /bin/bash replika && \
-            echo 'replika:replika' | chpasswd && \
-            mkdir -p /home/replika/app
+          WORKDIR /home/replika/app
+          COPY . .
 
-        WORKDIR /home/replika/app
+          CMD bash -c "\
+            python3 message-broker-v3-clean.py & \
+            sleep 5 && \
+            python3 webdash3-clean.py & \
+            sleep 5 && \
+            python3 geramensagem-v3-massive-loop.py & \
+            sleep 5 && \
+            python3 coleta-mensagem-v3-batch-lote.py && \
+            tail -f /dev/null"
+          EOF
 
-        RUN git clone https://x-access-token:\${GITHUB_PAT}@github.com/chaos4455/projeto-message-broker-replika-ai-v1.git temp && \
-            cp temp/*.py ./ && \
-            rm -rf temp
+      - name: 🐳 Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-        RUN if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
+      - name: 🛠️ Build Docker Image
+        run: |
+          docker build -t $IMAGE_NAME:$VERSION .
 
-        CMD bash -c "python3 message-broker-v3-clean.py & \
-                     sleep 5 && python3 webdash3-clean.py & \
-                     sleep 5 && python3 geramensagem-v3-massive-loop.py & \
-                     sleep 5 && python3 coleta-mensagem-v3-batch-lote.py && \
-                     tail -f /dev/null"
-        EOF
+      - name: 📤 Push Docker Image
+        run: |
+          docker push $IMAGE_NAME:$VERSION
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-
-    - name: Log in to DockerHub 🐳
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Build and push Docker image 🚀
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
-        build-args: |
-          GITHUB_PAT=${{ secrets.MASTERTOKEN }}
-
-    - name: ✅ Finalizado
-      run: echo "Imagem Docker criada e publicada com sucesso!"
+      # - name: 🏷️ Optional: Create and push tag
+      #   run: |
+      #     git config --global user.name "Elias Andrade - Replika AI"
+      #     git config --global user.email "chaos4455@users.noreply.github.com"
+      #     git tag RC1-beta-v0001
+      #     git push origin --tags
