@@ -18,6 +18,7 @@ Como **Arquiteto de Sistemas de IA**, **Desenvolvedor Python Full-Cycle** e um e
 <img width="1920" alt="chrome_snnH7HC5f1" src="https://github.com/user-attachments/assets/2b9d7454-8a45-4586-8c69-cceb68cd7a37" />
 
 
+
 ![screencapture-file-C-projeto-message-broker-replika-ai-v1-doc-web-diagram-20250408-004137-c1fa35d6-html-2025-04-08-00_42_31](https://github.com/user-attachments/assets/ce8c8ea2-7262-4c52-a352-e7d94c54df48)
 
 # 🚀 Message Broker Replika: Rede, Serviços e Deploy
@@ -48,6 +49,117 @@ O container expõe múltiplas portas para acessar seus diferentes serviços. O m
 *   **Senha:** `admin`
 
 **⚠️ Atenção:** Altere estas credenciais em ambientes de produção!
+
+
+## 🚀 Pipeline CI/CD de Elite: Docker, Python & GitHub Actions 🚀
+
+Olá! Sou **Elias Andrade** da **Replika AI Solutions** (Maringá-PR) 🇧🇷. Este projeto demonstra uma pipeline **CI/CD completa e robusta**, implementada com **GitHub Actions**, para automatizar o ciclo de vida de uma aplicação Python complexa (com múltiplos serviços e SSH) em containers **Docker**, culminando no deploy no **Docker Hub**.
+
+🔗 **Confira a Action em detalhes:** [`docker-build.yml`](https://github.com/chaos4455/projeto-message-broker-replika-ai-v1/blob/main/.github/workflows/docker-build.yml)
+
+---
+
+### 🛠️ Stack Tecnológico e Conceitos Aplicados:
+
+<div>
+  <!-- CI/CD & DevOps: Azul (CI), Verde (CD), Roxo (DevOps/Integração) -->
+  <img src="https://img.shields.io/badge/CI-Integração_Contínua-007ACC?style=for-the-badge&logo=githubactions&logoColor=white" alt="Continuous Integration">
+  <img src="https://img.shields.io/badge/CD-Entrega_Contínua-4C1?style=for-the-badge&logo=docker&logoColor=white" alt="Continuous Delivery">
+  <img src="https://img.shields.io/badge/DevOps-Automação-7A46B6?style=for-the-badge&logo=git&logoColor=white" alt="DevOps Automation">
+  <img src="https://img.shields.io/badge/GitHub_Actions-Orquestração-7A46B6?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions">
+
+  <!-- Plataformas & Containerização: Azul -->
+  <img src="https://img.shields.io/badge/Docker-Build_&_Run-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/Docker_Hub-Registry-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Hub">
+
+  <!-- Tecnologias Core: Amarelo -->
+  <img src="https://img.shields.io/badge/Python_3-Aplicação-FFC107?style=for-the-badge&logo=python&logoColor=black" alt="Python">
+  <img src="https://img.shields.io/badge/Bash-Scripting-FFC107?style=for-the-badge&logo=gnubash&logoColor=white" alt="Bash Scripting">
+
+  <!-- Ferramentas & Serviços: Vermelho -->
+  <img src="https://img.shields.io/badge/Supervisor-Gestão_Processos-D93025?style=for-the-badge&logo=linux&logoColor=white" alt="Supervisor">
+  <img src="https://img.shields.io/badge/OpenSSH-Acesso_&_Teste-D93025?style=for-the-badge&logo=linux&logoColor=white" alt="SSH">
+  <img src="https://img.shields.io/badge/Netcat-Teste_Rede-D93025?style=for-the-badge&logo=linux&logoColor=white" alt="Netcat">
+  <img src="https://img.shields.io/badge/Ubuntu-Base_OS-D93025?style=for-the-badge&logo=ubuntu&logoColor=white" alt="Ubuntu">
+</div>
+
+---
+
+### ✨ Destaques da Implementação (O Quê, Como e Por Quê):
+
+Esta pipeline vai além do básico, incorporando práticas que demonstram um profundo conhecimento em automação e DevOps:
+
+1.  **📥 Orquestração Inteligente:**
+    *   Checkout e Pull automáticos para garantir o código mais recente (`main`).
+    *   **Isolamento de Contexto (`dockerbuild`):** Criação de um diretório de build limpo, copiando apenas o necessário (`!(dockerbuild|.git|.github)` via `extglob`), otimizando o build e o tamanho da imagem final. 🧹
+
+2.  **🧱 Geração Dinâmica de Artefatos:**
+    *   **Dockerfile Dinâmico:** Gerado *on-the-fly* pela Action, permitindo flexibilidade e adaptação ao ambiente de build. ✨
+    *   **`supervisord.conf` Dinâmico:** Configuração do Supervisor criada dinamicamente, definindo a inicialização sequencial e gestão de múltiplos processos Python + SSH dentro do container. ⚙️
+
+3.  **🐳 Containerização Avançada:**
+    *   Base **Ubuntu LTS** com dependências essenciais (Python, Pip, Git, SSH Server, Supervisor, Net-tools, Netcat, Sshpass).
+    *   Configuração de usuário e **servidor SSH** dentro do container para manutenção e testes. 🔐
+    *   Gerenciamento robusto de múltiplos serviços com **Supervisor**.
+
+4.  **🔄 CI/CD Completo com Testes de Integração:**
+    *   Login seguro no **Docker Hub** via `secrets`. 🔒
+    *   **Build & Push Automatizados** para o Docker Hub. ⏫
+    *   **🚀 Testes Pós-Deploy Essenciais:** A Action *executa* a imagem recém-criada no próprio runner para validar a integridade:
+        *   ✅ **Verificação de Serviços (Supervisor):** Confirma se todos os processos estão `RUNNING`.
+        *   📶 **Teste de Portas Expostas (Netcat):** Garante que as portas da aplicação (`8555`, `8881`, etc.) estão acessíveis.
+        *   🔐 **Teste de Acesso SSH:** Valida a conectividade e configuração do SSH no container.
+    *   **🔍 Diagnóstico:** Coleta de logs do Supervisor e listagem de processos (`ps aux`) para depuração rápida.
+    *   **🧹 Limpeza Automática:** Remoção do container de teste ao final (`if: always()`).
+
+<img width="758" alt="chrome_b71wfgR0cT" src="https://github.com/user-attachments/assets/b4c100c2-c073-4f58-8402-53fc4d5714dd" />
+
+<img width="388" alt="chrome_6N7q0Si4xA" src="https://github.com/user-attachments/assets/0f9411e4-d285-4a47-9955-5083a5286922" />
+
+<img width="371" alt="chrome_tkahdW2RZY" src="https://github.com/user-attachments/assets/b36b9560-08b2-46f7-9154-8d7fa8718b84" />
+
+
+---
+
+### 🎓 Expertise Demonstrada:
+
+*   ✅ **CI/CD Avançado:** Design e implementação de workflows complexos no GitHub Actions.
+*   🐳 **Docker & Containerização:** Criação otimizada de imagens, multi-processos (Supervisor), configuração de serviços (SSH), Docker Hub.
+*   🐍 **Python:** Automação de build/deploy para aplicações Python.
+*   🐧 **Linux & Bash:** Scripting avançado para automação e configuração dinâmica.
+*   🧪 **Testes Automatizados:** Testes de integração em containers como parte crucial da pipeline.
+*   🔒 **Segurança & Boas Práticas:** Uso de secrets, isolamento de contexto, limpeza de ambiente.
+
+---
+
+**Elias Andrade** | **Replika AI Solutions** | Maringá-PR 🇧🇷
+*Especialista em Automação com IA, DevOps e Soluções On-Premisse/Cloud-Native.*
+
+
+<img width="409" alt="chrome_qTj4zb0yyb" src="https://github.com/user-attachments/assets/f235a0c9-a414-4cf0-af6d-ec995bd716a8" />
+
+<img width="707" alt="chrome_AO2tGfWoFR" src="https://github.com/user-attachments/assets/32a9af26-e685-456b-a643-890f7efa5713" />
+
+<img width="451" alt="chrome_uqe3uA2tTb" src="https://github.com/user-attachments/assets/0c1d3259-6840-4c38-8a99-57d47f36b190" />
+
+<img width="465" alt="chrome_NTdN7cP426" src="https://github.com/user-attachments/assets/35a95a86-4b58-45d8-a8f9-7dedeb427b13" />
+
+<img width="724" alt="Cursor_M2unFr2vt3" src="https://github.com/user-attachments/assets/45218b77-92ab-4066-838e-955c9d996b6a" />
+
+<img width="1920" alt="chrome_UqXVMVnkqS" src="https://github.com/user-attachments/assets/56a0b413-70a6-4a23-a96b-b511cd95ac18" />
+
+<img width="652" alt="chrome_Fvi5PMEM1p" src="https://github.com/user-attachments/assets/0756cbe0-0c8a-4edb-bc56-586069585a25" />
+
+<img width="290" alt="chrome_HbA8l1P3Y9" src="https://github.com/user-attachments/assets/f784a7f1-f9a6-4e85-9df2-f76ff02eb58e" />
+
+<img width="290" alt="chrome_j7P8tn6P9S" src="https://github.com/user-attachments/assets/22449975-2abb-4daf-b2c8-c78846c22c2b" />
+
+<img width="344" alt="chrome_JnPp5VNhwi" src="https://github.com/user-attachments/assets/e92c0eeb-b0b5-4a50-afaa-b32833f8187e" />
+
+<img width="325" alt="chrome_k726mGqiK9" src="https://github.com/user-attachments/assets/62742497-7ee8-46f6-bad2-d8eb1a12606b" />
+
+<img width="379" alt="chrome_JajqRfJNzD" src="https://github.com/user-attachments/assets/94d3d4b6-95a1-4fba-b8bb-3d1ee68c6d58" />
+
 
 ---
 
