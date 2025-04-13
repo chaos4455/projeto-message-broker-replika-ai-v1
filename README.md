@@ -18,7 +18,6 @@ Como **Arquiteto de Sistemas de IA**, **Desenvolvedor Python Full-Cycle** e um e
 <img width="1920" alt="chrome_snnH7HC5f1" src="https://github.com/user-attachments/assets/2b9d7454-8a45-4586-8c69-cceb68cd7a37" />
 
 
-
 ![screencapture-file-C-projeto-message-broker-replika-ai-v1-doc-web-diagram-20250408-004137-c1fa35d6-html-2025-04-08-00_42_31](https://github.com/user-attachments/assets/ce8c8ea2-7262-4c52-a352-e7d94c54df48)
 
 # 🚀 Message Broker Replika: Rede, Serviços e Deploy
